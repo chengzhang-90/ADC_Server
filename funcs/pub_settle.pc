@@ -1,0 +1,373 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <malloc.h>
+#include <math.h>
+#include <sys/errno.h>
+#include <time.h>
+#include <assert.h>
+
+#include "udo.h"
+#include "adc_syserr.h"
+#include "log.h"
+#include "tool_datetime.h"
+#include "pub_base.h"
+#include "sqltypes.h"
+#include "easysock.h"
+
+EXEC SQL include adc_struct.h;
+EXEC SQL include sqlca;
+EXEC SQL include common.h;
+
+char aczPubErrMsg[61];
+
+/**根据visa_id获取当前单位的对帐分类编号和账务周期**/
+/*char *opczChkAcctNo, 长度12+1 */
+/*char *epczTranDate,  长度8+1 */
+int PUB_GetDZTranNo( int eiVisaId, char *opczChkAcctNo,  char *epczTranDate )
+{
+   char aczChkAcctNo[13];
+   char aczTranDate[9];
+
+   EXEC SQL BEGIN DECLARE SECTION;
+    int iVisaId;
+    struct _CentCustCtl stCentCustCtl;
+    struct _SysCtl stSysCtl;
+   EXEC SQL END DECLARE SECTION;
+
+   memset( aczPubErrMsg, 0x00, sizeof( aczPubErrMsg ) );
+   memset( aczChkAcctNo, 0x00, sizeof( aczChkAcctNo ) );
+   memset( &stCentCustCtl, 0x00, sizeof( stCentCustCtl ) );
+   memset( &stSysCtl, 0x00, sizeof( stSysCtl ) );
+
+   iVisaId = eiVisaId;
+
+   EXEC SQL declare sel_cur1 cursor for 
+             select * from sys_ctl
+              where check_flag = '0';
+   EXEC SQL open sel_cur1;
+   if( sqlca.sqlcode != 0 )
+   {
+      sprintf( aczPubErrMsg, "%s%d", "ADP数据库错误", SQLCODE );     
+      LOG4C(( LOG_WARN, "ErrMsg = [%s]", aczPubErrMsg ));
+      EXEC SQL free sel_cur1;
+      return DB_SELECT_ERROR;
+   }
+
+   EXEC SQL fetch sel_cur1 into :stSysCtl;
+   if( sqlca.sqlcode != 0 )
+   {
+      if( sqlca.sqlcode == 100 )
+      {
+         sprintf( aczPubErrMsg, "%s", "系统总控表中无数据" );     
+         LOG4C(( LOG_WARN, "ErrMsg = [%s]", aczPubErrMsg ));
+         EXEC SQL close sel_cur1;
+         EXEC SQL free sel_cur1;
+         return PUB_NOT_FOUND_BANK_NO;
+      }
+      else
+      {
+         sprintf( aczPubErrMsg, "%s%d", "ADP数据库错误", SQLCODE );     
+         LOG4C(( LOG_WARN, "ErrMsg = [%s]", aczPubErrMsg ));
+         EXEC SQL close sel_cur1;
+         EXEC SQL free sel_cur1;
+         return DB_SELECT_ERROR;
+      }
+   }
+
+   EXEC SQL close sel_cur1;
+   EXEC SQL free sel_cur1;
+
+   EXEC SQL declare sel_cur2 cursor for
+             select *
+	            from cent_cust_ctl
+              where visa_id = :iVisaId;
+   EXEC SQL open sel_cur2;
+   if( sqlca.sqlcode != 0 )
+   {
+      sprintf( aczPubErrMsg, "%s%d", "ADP数据库错误", SQLCODE );     
+      LOG4C(( LOG_WARN, "ErrMsg = [%s]", aczPubErrMsg ));
+      EXEC SQL free sel_cur2;
+      return DB_SELECT_ERROR;
+   }
+
+   EXEC SQL fetch sel_cur2 into :stCentCustCtl; 
+   if( sqlca.sqlcode != 0 )
+   {
+      if( sqlca.sqlcode == 100 )
+      {
+         sprintf( aczPubErrMsg, "%s%d",
+                  "集中客户控制表中无此单位数据", iVisaId );     
+         LOG4C(( LOG_WARN, "ErrMsg = [%s]", aczPubErrMsg ));
+         EXEC SQL close sel_cur2;
+         EXEC SQL free sel_cur2;
+         return PUB_NOT_FOUND_VISA_ID;
+      }
+      else
+      {
+         sprintf( aczPubErrMsg, "%s%d", "ADP数据库错误", SQLCODE );     
+         LOG4C(( LOG_WARN, "ErrMsg = [%s]", aczPubErrMsg ));
+         EXEC SQL close sel_cur2;
+         EXEC SQL free sel_cur2;
+         return DB_SELECT_ERROR;
+      }
+   }
+   EXEC SQL close sel_cur2;
+   EXEC SQL free sel_cur2;
+
+   /**
+     * 如果交易日期等于系统账务日期,说明这是当前日期的账务序号
+     * 否则采用上一工作序号
+     * 在同一工作日期之内的,不严格区分账务序号
+     */
+   if( strcmp( epczTranDate, stSysCtl.m_WorkDate ) == 0 )
+   {
+      sprintf( aczChkAcctNo, "%03s%06d%03s", stSysCtl.m_BankCode,
+               iVisaId, stCentCustCtl.m_ChkNo );
+   }
+   else
+   {
+      sprintf( aczChkAcctNo, "%03s%06d%03s", stSysCtl.m_BankCode,
+               iVisaId, stCentCustCtl.m_LastChkNo );
+   }
+   PUB_StrTrim( stCentCustCtl.m_ChkFlag, ' ' );
+   if( strncmp(stCentCustCtl.m_ChkFlag, "1",1)==0 )
+   {
+      sprintf( aczPubErrMsg, "单位[%d]%s",
+               stCentCustCtl.m_VisaId, "此时不允许办理代理业务" );
+      LOG4C(( LOG_WARN, "ErrMsg = [%s]", aczPubErrMsg ));
+      return -5;
+   }
+
+   strcpy( opczChkAcctNo, aczChkAcctNo );
+   LOG4C(( LOG_DEBUG, "对账分类编号 = %s", opczChkAcctNo ));
+   
+   return 0;
+}
+
+int PUB_InsertResultRec( char *epaczMsg ,int eiResult, UDP epstInList,
+                         char * epaczTxcode )
+{
+   EXEC SQL BEGIN DECLARE SECTION;
+      int iNum;
+      char aczSettDate[9];
+      int iRunning ;
+      int iVisaId ;
+      int icommand_id =  0 ;
+      struct cmd_result2
+      {
+         int m_CommandId;     /* 命令ID */
+         int m_SysId;         /* 命令编号 */
+         char m_StartDate[9]; /* 命令执行日期 */
+         char m_StartTime[7]; /* 开始时间 */
+         char m_EndTime[7];   /* 完成时间 */
+         char m_EndDate[9];   /* 命令完成日期 */
+         int m_CmdStatus;     /* 命令执行结果 */
+         char m_Notes[301];   /* 备注 */
+         char m_CmdInfo[201]; /* 下一命令所用信息 */
+         char m_Operator[41]; /* 操作员 */
+         char m_AgTranDate[9]; /* 中间业务账务日期 */
+      } stCmdResult;
+      char aczMsg[300];
+      char I_tx_teller[13];
+      char aczTxCode[8];
+      char I_ch_tran_code[7];      /* 渠道交易码 */
+      char I_tx_date[9];           /* 交易日期 */
+
+   EXEC SQL END DECLARE SECTION;
+
+   memset( &stCmdResult, 0x00, sizeof(stCmdResult) );
+   memset( aczTxCode, 0x00, sizeof(aczTxCode) );
+   memset( I_ch_tran_code, 0x00, sizeof(I_ch_tran_code) );
+   strcpy( aczTxCode,epaczTxcode );
+
+   /*取域-75-交易柜员号的值*/
+   UDO_GetField( epstInList, 75, 0, I_tx_teller, 0 );
+   PUB_StrTrim(I_tx_teller ,' ');
+
+   /*取域-82-渠道交易码的值*/
+   UDO_GetField( epstInList, 82, 0, I_ch_tran_code, 0 );
+
+   /*取域-71-交易日期的值*/
+   UDO_GetField( epstInList, 71, 0, I_tx_date, 0 );
+
+   TOOL_GetSystemYYYYMMDD(stCmdResult.m_StartDate);
+   TOOL_GetSystemYYYYMMDD(stCmdResult.m_EndDate);
+   stCmdResult.m_CmdStatus = eiResult;
+   sprintf(stCmdResult.m_Notes,"%s",epaczMsg);
+   if( I_tx_teller[0] == 0x00)
+   {
+      strcpy( I_tx_teller,"999999999999");
+   }
+   sprintf(stCmdResult.m_Operator,"%s",I_tx_teller);
+   sprintf(stCmdResult.m_AgTranDate,"%s",I_tx_date);
+
+   TOOL_GetSystemhhmmss(stCmdResult.m_StartTime);
+   TOOL_GetSystemhhmmss(stCmdResult.m_EndTime);
+
+   if( atoi(I_ch_tran_code) < 1)
+   {
+      EXEC SQL select max(command_id) into :icommand_id from cmd_result;
+      if( SQLCODE != 0  )
+      {
+         sprintf( aczMsg, "200000009读命令执行表失败，[%d][%s]",
+                  sqlca.sqlcode, sqlca.sqlerrm  );
+         LOG4C(( LOG_FATAL, "%s\n", aczMsg ));
+         return -1;
+      }
+
+      EXEC SQL select sys_id
+                 into :stCmdResult.m_SysId
+                 from console_command
+                where subid =3
+                  and start_command =:aczTxCode;
+      if( SQLCODE != 0  )
+      {
+         sprintf( aczMsg, "200000009读命令执行表失败，[%d][%s]",
+                  sqlca.sqlcode, sqlca.sqlerrm  );
+         LOG4C(( LOG_FATAL, "%s\n", aczMsg ));
+         return -1;
+      }
+   }
+   else
+   {
+      EXEC SQL begin work;
+      icommand_id = atoi(I_ch_tran_code);
+      LOG4C(( LOG_DEBUG, "icommand_id = [%d] stCmdResult.m_Notes[%s][%s]",
+              icommand_id  ,stCmdResult.m_Notes ,I_ch_tran_code ));
+      EXEC SQL  update cmd_result
+                   set cmd_status = :stCmdResult.m_CmdStatus,
+                       end_date =:stCmdResult.m_EndDate,
+                       notes = :stCmdResult.m_Notes,
+                       end_time =:stCmdResult.m_EndTime
+                 where command_id = :icommand_id ;
+      if( SQLCODE != 0  || sqlca.sqlerrd[2] == 0)
+      {
+         sprintf( aczMsg, "200000009更新命令执行表失败，[%d][%s]",
+                  sqlca.sqlcode, sqlca.sqlerrm  );
+         LOG4C(( LOG_FATAL, "%s", aczMsg ));
+
+         EXEC SQL rollback work;
+
+         return -1;
+      }
+
+      EXEC SQL  commit work;
+
+      return 0;
+   }
+
+   stCmdResult.m_CommandId = icommand_id +1;
+    
+ /*
+   LOGCMDRESULT(stCmdResult);
+*/
+   EXEC SQL insert into cmd_result values(:stCmdResult);
+   if( SQLCODE != 0  )
+   {
+      sprintf( aczMsg, "200000009读命令执行表失败，[%d][%s]",
+               sqlca.sqlcode, sqlca.sqlerrm  );
+      LOG4C(( LOG_FATAL, "%s", aczMsg ));
+
+      EXEC SQL rollback work;
+
+      return -1;
+   }
+
+   EXEC SQL  commit work;
+
+   return 0;
+
+}
+
+/**
+  * 登记控制台命令结果表
+  * 0  - 登记成功
+  * -1 - 登记失败
+  */
+int PUB_UpdateCmdResult( int iCommandId, int iCmdStatus,
+                         char *pczCmdNotes )
+{
+   EXEC SQL BEGIN DECLARE SECTION;
+   CmdResult stCmdResult;
+   char aczNotes[100];
+   int SQLCODE2 = 0;
+   char SQLERR;
+   char aczTmp[100];
+   EXEC SQL END DECLARE SECTION;
+
+   memset( &stCmdResult, 0x00, sizeof(stCmdResult) );
+   memset( aczNotes, 0x00, sizeof(aczNotes) );
+   memset( aczTmp, 0x00, sizeof(aczTmp) );
+ 
+   LOG4C(( LOG_INFO, "命令ID(%d),状态(%d),提示信息(%s)\n",
+           iCommandId, iCmdStatus, pczCmdNotes ));
+
+   stCmdResult.m_CommandId = iCommandId;
+   stCmdResult.m_CmdStatus = iCmdStatus;
+   strcpy( stCmdResult.m_Notes, pczCmdNotes ); 
+
+   LOG4C(( LOG_INFO, "命令ID(%d),状态(%d),提示信息(%s)\n",
+           stCmdResult.m_CommandId,
+           stCmdResult.m_CmdStatus,
+           stCmdResult.m_Notes ));
+
+   if( stCmdResult.m_CmdStatus == 0 )
+   {
+      LOG4C(( LOG_INFO, "_____(%d)\n", SQLCODE ));
+
+      EXEC SQL begin work;
+
+      EXEC SQL update cmd_result
+                  set cmd_status = :stCmdResult.m_CmdStatus,
+                      notes = :stCmdResult.m_Notes
+                where command_id = :stCmdResult.m_CommandId;
+
+      SQLCODE2 = SQLCODE;
+      SQLERR = sqlca.sqlerrd[2];
+      strcpy( aczTmp, sqlca.sqlerrm );
+
+      LOG4C(( LOG_INFO, "_____(%d)(%d)(%d)(%s)\n",  
+              SQLCODE, stCmdResult.m_CommandId, 
+              stCmdResult.m_CmdStatus, stCmdResult.m_Notes ));
+      EXEC SQL commit work;
+   }
+   else
+   {
+      TOOL_GetSystemhhmmss( stCmdResult.m_EndTime );
+
+      EXEC SQL begin work;
+
+      EXEC SQL update cmd_result
+                  set cmd_status = :stCmdResult.m_CmdStatus,
+                      notes = :stCmdResult.m_Notes,
+                      end_time = :stCmdResult.m_EndTime
+                where command_id = :stCmdResult.m_CommandId;
+
+      SQLCODE2 = SQLCODE;
+      SQLERR = sqlca.sqlerrd[2];
+      strcpy( aczTmp, sqlca.sqlerrm );
+
+      LOG4C(( LOG_INFO, "_____(%d)(%d)(%d)(%s)(%s)\n",  
+              SQLCODE, stCmdResult.m_CommandId, 
+              stCmdResult.m_CmdStatus, stCmdResult.m_Notes,
+              stCmdResult.m_EndTime ));
+      EXEC SQL commit work;
+   }
+
+   if( SQLCODE2 != 0 )
+   {
+      LOG4C(( LOG_WARN, "登记命令结果表失败(command_id=%d),SQLCODE=%d [%d][%s]",
+              stCmdResult.m_CommandId, SQLCODE2, SQLERR, aczTmp ));
+      return -1;
+   }
+   else if( SQLERR == 0 )
+   {
+      LOG4C(( LOG_WARN, "没有找到(command_id=%d),SQLCODE=%d [%d][%s]",
+              stCmdResult.m_CommandId, SQLCODE2, SQLERR, aczTmp ));
+      return -1;
+   }
+   LOG4C(( LOG_INFO, "PUB_UpdateCmdResult结束!\n" ));
+   return 0;
+}

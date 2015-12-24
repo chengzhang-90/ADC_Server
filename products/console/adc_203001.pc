@@ -1,0 +1,233 @@
+/******************************************************************
+ * 交易名称: 日切
+ * 生成日期: 2011-5-4 17:07:36
+ * 作    者: zhouhd
+ ******************************************************************/
+
+#include <string.h>
+#include <stdlib.h>
+#include "adc_syserr.h"
+#include "udo.h"
+#include "log.h"
+#include "dic_public.h"
+#include "common.h"
+#include "adc_global.h"
+
+EXEC SQL INCLUDE SQLCA;
+EXEC SQL INCLUDE  "posp_struct.h";
+
+#define CHECK_HAVE_ALL_FIELD( aczTranCode, pstInList, pstOutList )\
+{\
+    int nTmpVar = 0;\
+    int FIELD_ID_LIST[] =\
+    {\
+        PROCESSCODE,\
+        OPERID,\
+        TXDATE,\
+        SERIAL,\
+    };\
+    for( nTmpVar = 0; nTmpVar < sizeof(FIELD_ID_LIST)/sizeof(int); nTmpVar++ )\
+    {\
+        if( !UDO_FieldExist( pstInList, FIELD_ID_LIST[nTmpVar] ) )\
+        {\
+            char aczRetCode[30], aczRetMessage[40];\
+            sprintf( aczRetCode, "%s%03d", aczTranCode, NO_REQUIRED_FIELD );\
+            sprintf( aczRetMessage, "缺少要求的字段 %d", FIELD_ID_LIST[nTmpVar] );\
+            LOG4C(( LOG_WARN, "%s", aczRetMessage ));\
+            UDO_AddField( pstOutList, RESPONSE, UDT_STRING, aczRetCode, 9 );\
+            UDO_AddField( pstOutList, RETMSG, UDT_STRING, aczRetMessage,strlen(aczRetMessage) );\
+            return -1;\
+        }\
+    }\
+}
+
+int IncBatch(const char *epczNextDate, char *opczMsg )
+{
+   EXEC SQL BEGIN DECLARE SECTION;
+   VisaInfo     stVisaInfo;
+   VisaInfoInd  stVisaInfoInd;
+   EXEC SQL END DECLARE SECTION;
+
+   if( GetSysCtrl( opczMsg ) != 0 )
+   {
+       return -1;
+   }
+
+   EXEC SQL DECLARE visa_info_cur CURSOR FOR SELECT * FROM visa_info
+        FOR UPDATE OF work_date, cur_batch, last_batch;
+   EXEC SQL OPEN visa_info_cur;
+   if( SQLCODE != 0 )
+   {
+       sprintf( opczMsg, "打开游标失败[%d]", SQLCODE );
+       return -1;
+   }
+
+   while( 1 )
+   {
+       memset( &stVisaInfo , 0, sizeof(VisaInfo) );
+       EXEC SQL FETCH visa_info_cur into :stVisaInfo :stVisaInfoInd;
+       if( SQLCODE )
+       {
+           if( SQLCODE == SQLNOTFOUND )
+               break;
+           sprintf( opczMsg, "取签约表游标信息出错[%d]", SQLCODE );
+           EXEC SQL close visa_info_cur;
+           return -1; 
+       }
+       stVisaInfo.m_nCurBatch = (stVisaInfo.m_nCurBatch % 999999) + 1;
+       memset( stVisaInfo.m_sWorkDate, 0, sizeof( stVisaInfo.m_sWorkDate ) );
+       memcpy( stVisaInfo.m_sWorkDate, epczNextDate, 8 );
+
+       EXEC SQL UPDATE visa_info SET work_date=:stVisaInfo.m_sWorkDate,
+               last_batch=cur_batch, cur_batch=:stVisaInfo.m_nCurBatch
+               where current of visa_info_cur;
+       if( SQLCODE != 0 )
+       {
+           sprintf( opczMsg, "更新签约信息表游标出错[%d]", SQLCODE );
+           EXEC SQL close visa_info_cur;
+           return -1;
+       }
+   } 
+
+   strcpy( opczMsg, "签约表信息处理成功" );
+   EXEC SQL close visa_info_cur;
+   /* 不要进行提交 由外面统一进行提交*/
+   return 0;
+}
+
+int adc_203001_main(UDP epstInList, UDP opstOutList)
+{
+    int nRet=0,nLen=0;
+    EXEC SQL BEGIN DECLARE SECTION;
+    char    I_ProcessCode[6+1];                 /* 处理码 */
+    char    I_OperId[12+1];                     /* 操作员号 */
+    char    I_TxDate[8+1];                      /* 平台账务日期 */
+    char    I_Serial[12+1];                     /* 平台流水号 */
+    char    O_Response[10+1];                   /* 响应代码 */
+    char    O_RetMsg[64+1];                     /* 响应信息 */
+    SysInfo  stSysInfo;
+    SysInfoInd stSysInfoInd;
+    char    aczNextDate[9];
+    char    aczSysDate[9];
+    int     nCurBatch=0;
+    EXEC SQL END DECLARE SECTION;
+    /*请在此添加EC变量*/
+
+    char  aczBuf[200];
+
+    CHECK_HAVE_ALL_FIELD( "adc_203001", epstInList, opstOutList )
+
+    memset( I_ProcessCode, 0, sizeof(I_ProcessCode) );
+    memset( I_OperId, 0, sizeof(I_OperId) );
+    memset( I_TxDate, 0, sizeof(I_TxDate) );
+    memset( I_Serial, 0, sizeof(I_Serial) );
+    memset( O_Response, 0, sizeof(O_Response) );
+    memset( O_RetMsg, 0, sizeof(O_RetMsg) );
+
+    memset( aczBuf, 0, sizeof(aczBuf) );
+
+    /*取域<1-处理码>的值*/
+    UDO_GetField( epstInList, PROCESSCODE, 0, I_ProcessCode, &nLen );
+
+    /*取域<14-操作员号>的值*/
+    UDO_GetField( epstInList, OPERID, 0, I_OperId, &nLen );
+
+    /*取域<12-平台账务日期>的值*/
+    UDO_GetField( epstInList, TXDATE, 0, I_TxDate, &nLen );
+
+    /*取域<15-平台流水号>的值*/
+    UDO_GetField( epstInList, SERIAL, 0, I_Serial, &nLen );
+
+    /*
+     * TODO: 在此添加绘制代码
+     */
+
+    if( InsertLogTab( atoi(I_Serial), I_TxDate, I_ProcessCode, I_OperId ) != 0 )
+    {
+        strcpy( O_RetMsg, "登记日切状态出错" );
+        strcpy( O_Response, "203001001" );
+        goto ErrorOut;
+    }
+
+    EXEC SQL update sys_info set last_workdate=last_workdate where 1=1;
+    if( SQLCODE != 0 )
+    {
+        strcpy( O_RetMsg, "锁定系统信息表出错" );
+        strcpy( O_Response, "203001002" );
+        LOG4C(( LOG_FATAL, "[%s] [%d]", O_RetMsg, SQLCODE ));
+        EXEC SQL ROLLBACK WORK;
+        goto ErrorOut;
+    }
+
+    memset( &stSysInfo, 0, sizeof(SysInfo) );
+    EXEC SQL SELECT * into :stSysInfo :stSysInfoInd FROM sys_info;
+    if( SQLCODE != 0 )
+    {
+        strcpy( O_RetMsg, "读系统控制表失败" );
+        strcpy( O_Response, "203001003" );
+        LOG4C(( LOG_FATAL, "[%s] [%d]", O_RetMsg, SQLCODE ));
+        EXEC SQL ROLLBACK WORK;
+        goto ErrorOut;
+    }
+
+    TOOL_GetSystemYYYYMMDD( aczSysDate );
+    LOG4C(( LOG_DEBUG, "%s  %s", stSysInfo.m_sWorkDate, aczSysDate ));
+    if( memcmp( stSysInfo.m_sWorkDate, aczSysDate, 8 ) > 0 )
+    {
+        strcpy( O_RetMsg, "当前工作日期已大于系统日期,勿重复日切" );
+        strcpy( O_Response, "203001004" );
+        EXEC SQL ROLLBACK WORK;
+        goto ErrorOut;
+    }
+
+    PUB_StrTrim( stSysInfo.m_sNextWorkDate , ' ' );
+    memset( aczNextDate, 0, sizeof(aczNextDate) );
+    GetDateBefore(-1, stSysInfo.m_sNextWorkDate, aczNextDate) ;
+
+    LOG4C(( LOG_DEBUG, "开始修改所有签约产品的对账序号\n" ));
+    if( IncBatch( stSysInfo.m_sWorkDate, O_RetMsg ) != 0 )
+    {
+        strcpy( O_Response, "203001005" );
+        EXEC SQL ROLLBACK WORK;
+        goto ErrorOut;
+    }
+
+    nCurBatch = (stSysInfo.m_nCurBatch % 999999 ) + 1;
+    EXEC SQL update sys_info set last_workdate=work_date, 
+         work_date=next_date, next_date=:aczNextDate,
+         last_batch=cur_batch, cur_batch=:nCurBatch   WHERE 1=1;
+    if( SQLCODE != 0 )
+    {
+        strcpy( O_RetMsg, "更新帐务日期失败" );
+        strcpy( O_Response, "203001006" );
+        LOG4C(( LOG_FATAL, "[%s] [%d]", O_RetMsg, SQLCODE ));
+        EXEC SQL ROLLBACK WORK;
+        goto ErrorOut;
+    }
+
+    EXEC SQL COMMIT WORK;
+
+    strcpy( O_RetMsg, "交易成功" );
+    strcpy( O_Response, "000000000" );
+
+ErrorOut:
+
+    LOG4C(( LOG_DEBUG, "Result:[%s][%s]", O_Response, O_RetMsg ));
+    if( strcmp( O_Response, "000000000" ) == 0 )
+    {
+        UpdateLogTab( atoi(I_Serial), I_TxDate, '0', O_RetMsg );
+    }
+    else
+    {
+        UpdateLogTab( atoi(I_Serial), I_TxDate, '1', O_RetMsg );
+    }
+
+    /*给域<2-响应代码>赋值*/
+    UDO_AddField( opstOutList, RESPONSE, UDT_STRING, O_Response, strlen(O_Response) );
+
+    /*给域<3-响应信息>赋值*/
+    UDO_AddField( opstOutList, RETMSG, UDT_STRING, O_RetMsg, strlen(O_RetMsg) );
+
+    return 0;
+}
+

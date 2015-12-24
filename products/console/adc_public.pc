@@ -1,0 +1,161 @@
+/*******************************************************************************
+交易名称: 公共函数
+作者:zhouhd
+*******************************************************************************/
+#include <string.h>
+#include <stdlib.h>
+#include "udo.h"
+#include "log.h"
+#include "adc_syserr.h"
+#include "pub_base.h"
+#include "dic_public.h"
+#include "dic_account.h"
+#include "common.h"
+#include "adc_global.h"
+#include "svc_define.h"
+
+EXEC SQL INCLUDE SQLCA;
+EXEC SQL INCLUDE  "posp_struct.h";
+
+int UpdateLogTab( int enPtSerial, const char *epczPtDate, char echStatus, const char *epczNote )
+{
+    EXEC SQL BEGIN DECLARE SECTION;
+    CmdResult    stCmdResult;
+    EXEC SQL END DECLARE SECTION;
+
+    memset( &stCmdResult, 0, sizeof(CmdResult) );
+
+    stCmdResult.m_nPtSerial = enPtSerial;
+    memcpy( stCmdResult.m_sPtDate, epczPtDate, 8 );
+
+    TOOL_GetSystemYYYYMMDD(stCmdResult.m_sEndDate);
+    TOOL_GetSystemhhmmss(stCmdResult.m_sEndTime);
+
+    stCmdResult.m_sCmdStatus[0] = echStatus;
+    sprintf( stCmdResult.m_sNote, "%.*s", sizeof(stCmdResult.m_sNote)-1, epczNote );
+
+    EXEC SQL UPDATE cmd_result SET end_date=:stCmdResult.m_sEndDate, end_time=:stCmdResult.m_sEndTime,
+           cmd_status=:stCmdResult.m_sCmdStatus, note=:stCmdResult.m_sNote 
+               WHERE pt_serial=:stCmdResult.m_nPtSerial AND pt_date=:stCmdResult.m_sPtDate;
+    if( SQLCODE )
+    {
+        LOG4C(( LOG_FATAL, "修改命令状态信息出错[%d][ptserial=%d][ptdate=%s]", 
+                    SQLCODE, stCmdResult.m_nPtSerial, stCmdResult.m_sPtDate ));
+        EXEC SQL ROLLBACK WORK;
+        return -1;
+    }
+    EXEC SQL COMMIT WORK;
+
+    return 0;
+}
+/*
+**  函数功能: 写帐务日志表信息
+**  函数名:   InsertLogTab
+**  输入参数: 1 平台流水
+**            2 平台日期
+**            3 处理码
+**            4 操作员  
+**  输出参数: 无
+**  返回值:   int  0 成功, 其他失败
+**  说明：    无
+*/
+int InsertLogTab( int enPtSerial,const char *epczPtDate, const char *epczProCode, const char *epczOper )
+{
+    EXEC SQL BEGIN DECLARE SECTION;
+    CmdResult    stCmdResult;
+    EXEC SQL END DECLARE SECTION;
+
+    memset( &stCmdResult, 0, sizeof(CmdResult) );
+
+    stCmdResult.m_nPtSerial = enPtSerial;
+    memcpy( stCmdResult.m_sPtDate, epczPtDate, 8 );
+    memcpy( stCmdResult.m_sProCode, epczProCode, 6 );
+    if( memcmp( stCmdResult.m_sProCode, "203001", 6 ) == 0 )
+    {
+        strcpy( stCmdResult.m_sProInfo, "日切" );
+    }
+    else if( memcmp( stCmdResult.m_sProCode, "203002", 6 ) == 0 )
+    {
+        strcpy( stCmdResult.m_sProInfo, "系统对账" );
+    }
+
+    TOOL_GetSystemYYYYMMDD(stCmdResult.m_sStartDate);
+    TOOL_GetSystemhhmmss(stCmdResult.m_sStartTime);
+
+    stCmdResult.m_sCmdStatus[0] = '2';
+    strcpy( stCmdResult.m_sNote, "开始执行..." );
+    sprintf( stCmdResult.m_sOper, "%.*s", sizeof(stCmdResult.m_sOper)-1,  epczOper );
+
+    EXEC SQL INSERT INTO cmd_result VALUES (:stCmdResult);
+    if( SQLCODE )
+    {
+        LOG4C(( LOG_FATAL, "插入命令状态信息出错[%d]", SQLCODE ));
+        EXEC SQL ROLLBACK WORK;
+        return -1;
+    }
+    EXEC SQL COMMIT WORK;
+
+    return 0;
+}
+
+int SetSysCtrl( int nTotalSettle, const char *epczProduct, const char *epczUnitCode, char echStatus, char *opczMsg )
+{
+   EXEC SQL BEGIN DECLARE SECTION;
+   char  aczProduct[10];
+   char  aczUnitCode[10];
+   char  chFlag=0;
+   EXEC SQL END DECLARE SECTION;
+
+   LOG4C(( LOG_DEBUG, "修改对账标志开始" ));
+
+   memset( aczProduct, 0, sizeof( aczProduct ) );
+   memset( aczUnitCode, 0, sizeof( aczUnitCode ) );
+   strcpy( aczUnitCode, epczUnitCode );
+   strcpy( aczProduct, epczProduct );
+   chFlag = echStatus;
+   LOG4C(( LOG_DEBUG, "修改对账标志[%d][%s][%s]" , nTotalSettle, aczProduct, aczUnitCode ));
+   if( nTotalSettle == 0 ) /*对分账*/
+   {
+        EXEC SQL UPDATE visa_info SET chk_flag=:chFlag
+             WHERE pro_code=:aczProduct and unit_code=:aczUnitCode;
+   }
+   else
+   {
+        EXEC SQL UPDATE visa_info SET chk_flag=:chFlag WHERE 1=1;
+   }
+   if( SQLCODE )
+   {
+       sprintf( opczMsg, "修改对账标志失败[%d]", SQLCODE );
+       EXEC SQL ROLLBACK WORK;
+       return -1;
+   }
+   EXEC SQL COMMIT WORK;
+   LOG4C(( LOG_DEBUG, "修改对账标志成功" ));
+   return 0;
+} 
+
+int GetSysCtrl( char *opczMsg )
+{
+   EXEC SQL BEGIN DECLARE SECTION;
+   int nRunning = 0;
+   EXEC SQL END DECLARE SECTION;
+
+
+   EXEC SQL SELECT count(*) INTO :nRunning from visa_info
+          WHERE chk_flag = '1';
+   if( SQLCODE != 0 )
+   {
+       sprintf( opczMsg, "读签约信息表出错[%d]", SQLCODE );
+       return -1;
+   }
+
+   LOG4C(( LOG_WARN, "正在运行的对账业务[%d]个\n", nRunning ));
+
+   if( nRunning > 0 )
+   {
+       sprintf( opczMsg, "平台有[%d]个业务正在对账,不允许做平台总对账和日切", nRunning );
+       return -1;
+   }
+   
+   return 0;
+}

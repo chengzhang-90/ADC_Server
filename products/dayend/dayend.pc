@@ -1,0 +1,157 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <pthread.h>
+ #include <signal.h>
+ #include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <fcntl.h>
+#include "tool_datetime.h"
+#include "easysock.h"
+
+/**
+    * 建立所有的交易代码和操作关联
+      */
+
+EXEC SQL INCLUDE SQLCA;
+
+int SYS_ZDTJ( int enTranCode, const char *epczIp, int enPort )
+{
+    EXEC SQL BEGIN DECLARE SECTION;
+    char  aczLastDate[20];
+    EXEC SQL END DECLARE SECTION;
+
+    char aczSendBuf[1024];
+    char aczBuf[1024];
+    int  nSendLen=0;
+    char aczRecvBuf[1024];
+    int  nRecvLen=0;
+    int  nOff=0;
+    int  nRet=0;
+
+    memset( aczSendBuf, 0, sizeof(aczSendBuf) );
+    memset( aczRecvBuf, 0, sizeof(aczRecvBuf) );
+    memset( aczBuf, 0, sizeof(aczBuf) );
+    memset( aczLastDate, 0, sizeof(aczLastDate) );
+    switch( enTranCode )
+    {
+    case 1:
+        memcpy( aczBuf, "101001", 6 );
+        nOff += 6;
+        memcpy( aczBuf+nOff, "01                  ", 20 );
+        nOff += 20;
+        break;
+    case 2:
+        EXEC SQL SELECT last_workdate INTO :aczLastDate FROM sys_info WHERE 1=1;
+        if( SQLCODE )
+        {
+            printf( "读取对账日期出错[%d]\n", SQLCODE );
+            return -1;
+        }
+
+        memcpy( aczBuf, "101002", 6 );
+        nOff += 6;
+        memcpy( aczBuf+nOff, aczLastDate, 8 );
+        nOff += 8;
+        memcpy( aczBuf+nOff, "01                  ", 20 );
+        nOff += 20;
+        break;
+    default:
+        break;
+    }
+
+    memcpy( aczSendBuf, aczBuf, nOff );
+    nSendLen = nOff ;
+
+    nRet = transCMP( epczIp, enPort, aczSendBuf, nSendLen, 
+            aczRecvBuf, &nRecvLen, ASCII_FOUR_NONE_HEAD);
+
+    printf("通讯应答[%d]\n接收长度[%d]\n", nRet, nRecvLen);
+    if( nRet != 0 )
+    {
+        printf( "交易通信出错\n" );
+        return  -1;
+    }
+    printf("接收内容[%s]\n",  aczRecvBuf );
+    return 0;
+}
+
+int main(int argc, char **argv )
+{
+    int nRet=0;
+    char aczDateTime[30];
+    char aczProcessName[100+1];  /*程序名称*/
+    char aczProcode[100+1];  /*交易码*/
+    char aczHostIP[100+1];	   /*服务器IP*/
+    char aczPort[100+1];	  /*服务器端口*/
+   
+
+    memset(aczDateTime, 0, sizeof(aczDateTime));
+    memset(aczProcessName, 0, sizeof(aczProcessName));
+    memset(aczProcode, 0, sizeof(aczProcode));
+    memset(aczHostIP, 0, sizeof(aczHostIP));
+    memset(aczPort, 0, sizeof(aczPort));
+
+		
+    if( argc < 4 )
+    {
+        printf("usage : %s 交易码 <IP地址> <端口> \n",argv[0]);
+        printf("usage :交易码 1日切 2结算 \n");
+        return 0;
+    }
+
+    strcpy(aczProcessName, argv[0]);
+    strcpy(aczProcode,   argv[1]);
+    strcpy(aczHostIP, argv[2] );
+    strcpy(aczPort, argv[3] );
+		
+
+   /* signal( SIGUSR1, doExit ); */
+   switch( fork() )
+   {
+	   case -1:
+	      	exit(1);
+	      break;
+	   case 0:
+	      break;
+	   default:
+	   	exit(0);
+	      return 0;
+   }
+   setsid();  
+    memset( aczDateTime, 0, sizeof(aczDateTime) );
+    TOOL_GetSystemYYYYMMDDhhmmss( aczDateTime );
+
+    printf( "-----开始[%4.4s/%2.2s/%2.2s %2.2s:%2.2s:%2.2s]-----\n",
+            aczDateTime, aczDateTime+4, aczDateTime+6, aczDateTime+8, aczDateTime+10, aczDateTime+12 );
+
+    if( (nRet=DBConnect()) != 0 )
+    {
+        printf( "连接数据库失败[%d]\n", nRet );
+        return -1;
+    }
+
+    if( atoi( aczProcode) == 1 )
+    {
+        printf ( "开始运行程序[%s][1日切][%s][%s]\n",aczProcessName, aczHostIP,aczPort);
+        SYS_ZDTJ( 1, argv[2], atoi( argv[3] ) );
+    }
+    else
+    {
+        printf ( "开始运行程序[%s][2结算][%s][%s]\n",aczProcessName, aczHostIP,aczPort);
+        SYS_ZDTJ( 2, argv[2], atoi( argv[3] ) );
+    }
+
+    DBDisconnect();
+    printf( "----------------结束--------------------\n\n\n" );
+    return 0;
+}
+

@@ -1,0 +1,460 @@
+/*****************************************************************
+* 
+*    Copyright (C), 2010-2020, NewLand Computer Co., Ltd.
+*    Version:  VER1.0      
+*    Description: 用户自己定义的一些公共函数集合 
+*    History: 
+*    
+*    Function List:
+*            DBDisconnect:   断开数据库的链接
+*            DBConnect:      链接数据库
+*            GetDateBefore  :  根据日期计算前面若干天的日期 
+*            diffDate: 计算两个日期之间相差的天数
+*            transCMP: 往CMP前置发送交易数据,并从前置取回数据
+*            diffFloat:比较两个float型数据是否相等
+*            
+*    date:   2010-7-20
+*    author: zhou hong di 
+*    created: zhou hong di
+*
+*    date:
+*    author:
+*    modify description
+*   
+*****************************************************************/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <malloc.h>
+#include <math.h>
+#include <sys/errno.h>
+#include <time.h>
+#include <assert.h>
+
+#include "udo.h"
+#include "adc_syserr.h"
+#include "log.h"
+#include "tool_datetime.h"
+#include "pub_base.h"
+#include "easysock.h"
+
+EXEC SQL INCLUDE SQLCA;
+
+EXEC SQL BEGIN DECLARE SECTION;
+   char aczDataBase[40];
+   varchar aczDBUser[20];
+   varchar aczDBPass[20];
+   varchar aczDBUid[100];
+EXEC SQL END DECLARE SECTION;
+
+
+int TestDBConnect()
+{
+    EXEC SQL SELECT * FROM sys_info;
+
+    if( SQLCODE != 0 )
+    {
+        LOG4C((LOG_FATAL, "联接数据库失败 SQLCODE=[%d]\n", SQLCODE));
+        return SQLCODE;
+    }
+
+    return 0;
+}
+
+int DBConnect()
+{
+   char *pczUsername;
+   char *pczPassword;
+   char *pczDbname;
+
+   if( (pczUsername=(char *)getenv("DBUSER")) == NULL )
+   {
+      LOG4C(( LOG_FATAL, "请先设置环境变量DBUSER" ));
+      return -1;
+   }
+
+   if( (pczPassword=(char *)getenv("DBPASS")) == NULL )
+   {
+      LOG4C(( LOG_FATAL, "请先设置环境变量DBPASS" ));
+      return -1;
+   }
+
+   strcpy( (char *)aczDBUser.arr, pczUsername );
+   strcpy( (char *)aczDBPass.arr, pczPassword );
+   aczDBUser.len = strlen( pczUsername );
+   aczDBPass.len = strlen( pczPassword );
+
+   if( (pczDbname=(char *)getenv("ORACLE_ADDR")) == NULL )
+   {
+      EXEC SQL connect :aczDBUser identified by :aczDBPass ;
+   }
+   else
+   {
+      strcpy( (char *)aczDBUid.arr,  pczDbname );
+      aczDBUid.len   = strlen( pczDbname );
+      EXEC SQL connect :aczDBUser identified by :aczDBPass USING :aczDBUid;
+   }
+
+   /***
+   memset (aczDataBase, 0, sizeof (aczDataBase));
+   sprintf (aczDataBase, "%s", getenv("DBNAME"));
+   EXEC SQL connect :aczDataBase;
+   **/
+
+   if( SQLCODE != 0 )
+   {
+      LOG4C((LOG_FATAL, "联接数据库失败 SQLCODE=[%d]\n", SQLCODE));
+      return SQLCODE;
+   }
+
+   return 0;
+}
+
+int DBDisconnect()
+{
+   EXEC SQL commit work release;
+   return 0;
+}
+
+/*
+ *
+ * Function: GetDateBefore 
+ * Description:  根据日期计算前面若干天的日期 
+ * Input:
+ *         eiDateNum - 相隔天数(>0表示前面若干天, <0表示后面若干天)
+ *         epaczDate - 起始日期(格式YYYYMMDD或者YYYY-MM-DD)
+ * Output:
+ *         opaczDate - 返回日期(格式YYYYMMDD或者YYYY-MM-DD)
+ * 
+ * Return: 
+ *         -1 - ERROR DATE FORMAT
+ *          0 - SUCC
+ * Other:
+ *
+ */
+int GetDateBefore(int eiDateNum ,char * epaczDate, char * opaczDate)
+{
+   long lSub;
+   char aczYear[5];
+   char aczMonth[3];
+   char aczDay[3];
+   char aczTmpDate[50];
+   int  iDateFormat = 0;
+
+   struct tm stTmpTime ,stTmpTime2;
+   struct tm * stTmpTime1;
+   time_t iTmpTime2;
+
+   memset(aczYear, 0, sizeof(aczYear));
+   memset(aczMonth, 0, sizeof(aczMonth));
+   memset(aczDay, 0, sizeof(aczDay));
+   memset(aczTmpDate, 0, sizeof(aczTmpDate));
+
+   memcpy(aczTmpDate,epaczDate,49);
+
+   /* 长度大于 10位数据错误格式*/
+   if( strlen(aczTmpDate) > 10)
+   {
+     return -1;
+   }
+
+   /*对于日期的进行拆分*/
+   PUB_StrTrim(aczTmpDate,' ');
+   if( strlen(aczTmpDate) > 8)
+   {
+     memcpy(aczYear,aczTmpDate,4);
+     memcpy(aczMonth,aczTmpDate + 5,2);
+     memcpy(aczDay,aczTmpDate + 8,2);
+     iDateFormat = 1;
+   }
+   else
+   {
+     memcpy(aczYear,aczTmpDate,4);
+     memcpy(aczMonth,aczTmpDate + 4,2);
+     memcpy(aczDay,aczTmpDate + 6,2);
+     iDateFormat = 0;
+   }
+
+   memset( &stTmpTime, 0, sizeof(stTmpTime) );
+   stTmpTime.tm_year = atoi(aczYear) - 1900;
+   stTmpTime.tm_mon = atoi(aczMonth) - 1;
+   stTmpTime.tm_mday = atoi(aczDay);
+
+   stTmpTime.tm_hour = 0;
+   stTmpTime.tm_min = 0;
+   stTmpTime.tm_sec = 1;
+
+   memset( &stTmpTime2, 0, sizeof(stTmpTime2) );
+   stTmpTime2.tm_year = atoi(aczYear) - 1900;
+   stTmpTime2.tm_mon = atoi(aczMonth) - 1;
+   stTmpTime2.tm_mday = atoi(aczDay) -1;
+   stTmpTime2.tm_hour = 0;
+   stTmpTime2.tm_min = 0;  
+   stTmpTime2.tm_sec = 1;
+
+   iTmpTime2 = mktime(&stTmpTime);
+
+   lSub = (mktime(&stTmpTime) - mktime(&stTmpTime2)) * eiDateNum;
+
+   iTmpTime2 -= lSub ;
+
+   stTmpTime1 = localtime( &iTmpTime2);
+  
+   if( iDateFormat == 1 ) 
+      sprintf(opaczDate,"%04d-%02d-%02d",stTmpTime1->tm_year+ 1900 ,stTmpTime1->tm_mon+1,stTmpTime1->tm_mday );
+   else
+      sprintf(opaczDate,"%04d%02d%02d",stTmpTime1->tm_year+ 1900 ,stTmpTime1->tm_mon+1,stTmpTime1->tm_mday );
+
+   return 0;
+
+}
+
+/*
+ *
+ * Function: diffDate 
+ * Description: 计算两个日期之间相差的天数
+ * Input:
+ *         epczFormat - 日期格式
+ *                       "4YMD", "4Y-M-D", "4Y/M/D", "4Y M D",
+ *                       "MD4Y", "M-D-4Y", "M/D/4Y", "M D 4Y",
+ *                       "DM4Y", "D-M-4Y", "D/M/4Y", "D M 4Y" 
+ *         epczBeginDate - 起始日期
+ *         epczEndDate - 终止日期
+ * Output:
+ * 
+ * Return: 
+ *         -1 - ERROR DATE FORMAT
+ *         >0 - 具体相差多少天 
+ * Other:
+ *
+ */
+int diffDate( char *epczFormat, char *epczBeginDate, char *epczEndDate )
+{
+   char aczYear[2][5], aczMonth[2][3], aczDay[2][3];
+   int i;
+   struct tm stTime1, stTime2;
+   time_t tT1, tT2;
+   static char *pczFormat[] = { "4YMD", "4Y-M-D", "4Y/M/D", "4Y M D",
+                                "MD4Y", "M-D-4Y", "M/D/4Y", "M D 4Y",
+                                "DM4Y", "D-M-4Y", "D/M/4Y", "D M 4Y" };
+   struct _SeekPos { int m_Year; int m_Month; int m_Day; };
+   static struct _SeekPos astPos[] = {
+                                { 0, 4, 6}, { 0, 5, 8 }, { 0, 5, 8 },
+                                { 2, 0, 4}, { 3, 0, 6 }, { 3, 0, 6 },
+                                { 0, 2, 4}, { 0, 3, 6 }, { 0, 3, 6 }
+                                      };
+
+   for( i = 0; i < 9; i++ )
+   {
+      if( strcmp( epczFormat, pczFormat[i] ) == 0 )
+      {
+         break;
+      }
+   }
+   if( i == 9 )
+   {
+      return -1;
+   }
+   memset( aczYear, 0, sizeof(aczYear) );
+   memset( aczMonth, 0, sizeof(aczMonth) );
+   memset( aczDay, 0, sizeof(aczDay) );
+
+   memcpy( aczYear[0],  epczBeginDate + astPos[i].m_Year,  4 );
+   memcpy( aczMonth[0], epczBeginDate + astPos[i].m_Month, 2 );
+   memcpy( aczDay[0],   epczBeginDate + astPos[i].m_Day,   2 );
+   memcpy( aczYear[1],  epczEndDate + astPos[i].m_Year,  4 );
+   memcpy( aczMonth[1], epczEndDate + astPos[i].m_Month, 2 );
+   memcpy( aczDay[1],   epczEndDate + astPos[i].m_Day,   2 );
+
+   memset( &stTime1, 0, sizeof(stTime1) );
+   memset( &stTime2, 0, sizeof(stTime2) );
+   stTime1.tm_year = atoi( aczYear[0] )-1900;
+   stTime1.tm_mon  = atoi( aczMonth[0] )-1;
+   stTime1.tm_mday = atoi( aczDay[0] );
+   stTime2.tm_year = atoi( aczYear[1] )-1900;
+   stTime2.tm_mon  = atoi( aczMonth[1] )-1;
+   stTime2.tm_mday = atoi( aczDay[1] );
+   tT1 = mktime( &stTime1 );
+   tT2 = mktime( &stTime2 );
+
+   return (int)(abs(tT1-tT2)/86400);
+}
+
+
+/*
+ *
+ * Function: transCMP 
+ * Description: 往CMP前置发送交易数据,并从前置取回数据
+ * Input:
+ *         epczAddr - CMP前置的IP地址
+ *         eiPort - CMP前置的端口 
+ *         epczSendBuf - 发送的数据内容 
+ *         eiSendLen - 发送的数据内容长度 
+ * Output:
+ *         opczRecvBuf - 接收的数据内容 
+ *         opiRecvLen - 接收的数据内容长度 
+ * 
+ * Return: 
+ *         -1 - 通讯失败
+ *         0  - SUCC 
+ * Other:
+ *
+ */
+int transCMP( char *epczAddr, int eiPort, char *epczSendBuf,
+              int eiSendLen, char *opczRecvBuf, int *opiRecvLen, HeadType enumHead )
+{
+   int iSock;
+   int iRet;
+
+   LOG4C(( LOG_INFO, "to 前置=[%s:%d][%d]",epczAddr, eiPort, enumHead));
+   //LOG4C(( LOG_INFO, "to 前置报文=[%s]",epczSendBuf));
+
+   iSock = tcp_connect( epczAddr, eiPort );
+   if( iSock == -1 )
+   {
+      LOG4C(( LOG_INFO, "与前置[%s:%d]连接失败,error=%s",
+              epczAddr, eiPort, strerror(errno) ));
+      return  -1;
+   }
+   iRet = tcp_ctl_send( iSock, epczSendBuf, eiSendLen, 30000, enumHead );
+   if( iRet == -1 )
+   {
+      LOG4C(( LOG_INFO, "往前置[%s:%d]发送失败,error=%s",
+                 epczAddr, eiPort, strerror(errno) ));
+      tcp_close( iSock );
+      return  -1 ;
+   }
+
+   iRet = tcp_ctl_recv( iSock, opczRecvBuf, 100000, 120000, enumHead );
+   if( iRet == -1 )
+   {
+      LOG4C(( LOG_INFO, "从前置[%s:%d]接收失败,error=%s", epczAddr,
+                          eiPort, strerror(errno) ));
+      tcp_close( iSock );
+      return  -1;
+   }
+   *opiRecvLen = iRet;
+   tcp_close( iSock );
+
+   return 0;
+}
+
+int diffFloat( double f1, double f2 )
+{
+   const float PRECISION=0.00001;
+   float fTmp=0;
+
+   fTmp = f1-f2;
+   if( fabs(fTmp) < PRECISION )
+   {
+       return 0;
+   }
+   if( fTmp < PRECISION )
+   {
+       return -1;
+   }
+   else
+   {
+       return 1;
+   }
+}
+int DBConnect_Context( sql_context context )
+{
+
+   EXEC SQL BEGIN DECLARE SECTION;
+    sql_context mycontext;
+   EXEC SQL END DECLARE SECTION;
+
+   char *pczUsername;
+   char *pczPassword;
+   char *pczDbname;
+
+   mycontext=context;
+   EXEC SQL CONTEXT USE :mycontext;
+
+   if( (pczUsername=(char *)getenv("DBUSER")) == NULL )
+   {
+      LOG4C(( LOG_FATAL, "请先设置环境变量DBUSER" ));
+      return -1;
+   }
+
+   if( (pczPassword=(char *)getenv("DBPASS")) == NULL )
+   {
+      LOG4C(( LOG_FATAL, "请先设置环境变量DBPASS" ));
+      return -1;
+   }
+
+   strcpy( (char *)aczDBUser.arr, pczUsername );
+   strcpy( (char *)aczDBPass.arr, pczPassword );
+   aczDBUser.len = strlen( pczUsername );
+   aczDBPass.len = strlen( pczPassword );
+
+   if( (pczDbname=(char *)getenv("ORACLE_ADDR")) == NULL )
+   {
+      EXEC SQL connect :aczDBUser identified by :aczDBPass ;
+   }
+   else
+   {
+      strcpy( (char *)aczDBUid.arr,  pczDbname );
+      aczDBUid.len   = strlen( pczDbname );
+      EXEC SQL connect :aczDBUser identified by :aczDBPass USING :aczDBUid;
+   }
+
+   if( SQLCODE != 0 )
+   {
+      LOG4C((LOG_FATAL, "联接数据库失败 SQLCODE=[%d]\n", SQLCODE));
+      return SQLCODE;
+   }
+
+   return 0;
+}
+
+int GetSecondBefore(int eiSecond ,char * epaczDate, char * opaczDate)
+{
+   char aczYear[5];
+   char aczMonth[3];
+   char aczDay[3];
+   char aczHour[3];
+   char aczMin[3];
+   char aczSecond[3];
+
+   struct tm stTmpTime ;
+   struct tm * ptm;
+   time_t iTmpTime;
+
+   memset(aczYear, 0, sizeof(aczYear));
+   memset(aczMonth, 0, sizeof(aczMonth));
+   memset(aczDay, 0, sizeof(aczDay));
+   memset(aczHour, 0, sizeof(aczHour));
+   memset(aczMin, 0, sizeof(aczMin));
+   memset(aczSecond, 0, sizeof(aczSecond));
+
+   memcpy(aczYear, epaczDate, 4);
+   memcpy(aczMonth, epaczDate + 4,2);
+   memcpy(aczDay,   epaczDate + 6,2);
+   memcpy(aczHour,  epaczDate + 8,2);
+   memcpy(aczMin,   epaczDate + 10,2);
+   memcpy(aczSecond, epaczDate + 12,2);
+
+   memset( &stTmpTime, 0, sizeof(stTmpTime) );
+   stTmpTime.tm_year = atoi(aczYear) - 1900;
+   stTmpTime.tm_mon = atoi(aczMonth) - 1;
+   stTmpTime.tm_mday = atoi(aczDay);
+
+   stTmpTime.tm_hour = atoi(aczHour);
+   stTmpTime.tm_min = atoi(aczMin);
+   stTmpTime.tm_sec = atoi(aczSecond);
+
+   iTmpTime = mktime(&stTmpTime);
+   iTmpTime -= eiSecond ;
+   ptm = localtime( &iTmpTime);
+
+   sprintf(opaczDate,"%04d%02d%02d%02d%02d%02d",
+        ptm->tm_year+ 1900 ,ptm->tm_mon+1,ptm->tm_mday,
+        ptm->tm_hour ,ptm->tm_min,ptm->tm_sec  );
+
+
+   return 0;
+
+}
+

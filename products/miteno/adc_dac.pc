@@ -1,0 +1,345 @@
+/*******************************************************************************
+交易名称:  DAC校验函数
+作者:renhui
+*******************************************************************************/
+#include <string.h>
+#include <stdlib.h>
+#include "udo.h"
+#include "log.h"
+#include "adc_syserr.h"
+#include "pub_base.h"
+#include "dic_public.h"
+#include "dic_account.h"
+#include "common.h"
+#include "adc_global.h"
+#include "svc_define.h"
+
+EXEC SQL INCLUDE SQLCA;
+
+EXEC SQL include "svc_struct.h";
+
+static int  CalcDac( const char *epczBuf, int enLen, char *opczDac )
+{
+    int  i=0;
+    char  aczAscii[1024];
+    char  aczTmp[9];
+    char  aczDes[17];
+    int  nLen=0;
+
+    memset( aczAscii, 0, sizeof(aczAscii) );
+    memset( aczTmp, 0, sizeof(aczTmp) );
+
+    memcpy( aczAscii, epczBuf, enLen );
+    nLen  = enLen;
+
+    for( i=0; i<nLen; )
+    {
+        aczTmp[ i&7 ] ^= aczAscii[ i ];
+
+        i++;
+
+        if( i%8 == 0 )
+        {
+            memset( aczDes, 0, sizeof(aczDes) );
+            EncryptKey( aczDes, aczTmp );
+            TOOL_ConvertAscii2BCD( aczDes, aczTmp, 16 );
+        }
+
+    }
+
+    if( nLen % 8 != 0 )
+    {
+        memset( aczDes, 0, sizeof(aczDes) );
+        EncryptKey( aczDes, aczTmp );
+        TOOL_ConvertAscii2BCD( aczDes, aczTmp, 16 );
+    }
+
+    TOOL_ConvertBCD2Ascii( aczTmp, 16, opczDac );
+
+    return 0;
+} 
+
+/* SVC_Detail的DAC构成
+   *
+   * 商户号15个字节+终端号8个字节+金额12个字节(不含小数点) + 卡号32个字节 + 终端响应码2个字节 +  终端处理码6个字节
+   *
+   * 金额字段不含小数点，不足12字节，前补0，比如0.12,表示为000000000012
+   * 其余所有的字段不足，均是左对齐，后补空格
+   */
+int Gen_SVC_Detail_Dac( T_SVC_Detail estTx, char *opczDac )
+{
+    char  aczBuf[200];
+
+    memset( aczBuf, 0, sizeof(aczBuf) );
+
+    sprintf( aczBuf, "%-15.15s%-8.8s%-12.0f%-32.32s%-2.2s%-6.6s", estTx.m_sMerchantId, estTx.m_sTerminalId, estTx.m_fTxAmt*100,
+            estTx.m_sCardNo, estTx.m_sChRetCode, estTx.m_sChTxCode );
+
+    CalcDac( aczBuf, strlen(aczBuf), opczDac );
+    
+    return 0;
+}
+int  Check_SVC_Detail_Dac( T_SVC_Detail estTx )
+{
+    char  aczDac[17];
+
+    memset( aczDac, 0, sizeof(aczDac) );
+    Gen_SVC_Detail_Dac( estTx, aczDac );
+
+    if( memcmp( aczDac, estTx.m_sDac, 16 ) != 0 )
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
+   *SVC_Merchant表校验
+   * 商户号15个字节 + 交易限额12个字节 + 单笔交易限额12个字节 + 账号32个字节 + 扣率12个字节+ 最大佣金12个字节 +最小佣金12个字节
+   * 所有浮点型字段，均是12个字节，前补0
+   * 所有字符型字段，均是左对齐，后补空格
+   */
+int  Gen_SVC_Merchant_Dac( T_SVC_Merchant estMerchant, char *opczDac )
+{
+    char  aczBuf[200];
+
+    memset( aczBuf, 0, sizeof(aczBuf) );
+
+    sprintf( aczBuf, "%-15.15s%-12.0f%-12.0f%-32.32s%-12.0f%-12.0f%-12.0f", estMerchant.m_sCode, estMerchant.m_fTotalLimit*100, 
+            estMerchant.m_fPayLimit*100, estMerchant.m_sAcctNo, estMerchant.m_fBrokerRate*100, 
+            estMerchant.m_fBrokerMax*100, estMerchant.m_fBrokerMin*100 );
+    
+    CalcDac( aczBuf, strlen(aczBuf), opczDac );
+
+    return 0;
+}
+int  Check_SVC_Merchant_Dac( T_SVC_Merchant estMerchant )
+{
+    char  aczDac[17];
+
+    return 0;
+    memset( aczDac, 0, sizeof(aczDac) );
+    Gen_SVC_Merchant_Dac( estMerchant, aczDac );
+
+    if( memcmp( aczDac, estMerchant.m_sDac, 16 ) != 0 )
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
+   *SVC_CardInfo表校验
+   * 卡BIN12个字节+卡号32个字节+交易密码16个字节+失效期8个字节+CVN 10个字节+ 磁道一 120字节+2磁道40个字节+3磁道120个字节
+   * 押金12个字节
+   * 所有浮点型字段，均是12个字节，前补0
+   * 所有字符型字段，均是左对齐，后补空格
+   */
+int  Gen_SVC_CardInfo_Dac( T_SVC_CardInfo estCardInfo, char *opczDac )
+{
+    char  aczBuf[500];
+
+    memset( aczBuf, 0, sizeof(aczBuf) );
+
+    sprintf( aczBuf, "%-12.12s%-32.32s%-16.16s%-8.8s%-10.10s%-120.120s%-40.40s%-120.120s%012.0f", 
+            estCardInfo.m_sCardBin, estCardInfo.m_sCardNo, estCardInfo.m_sPin, estCardInfo.m_sValiDate, 
+            estCardInfo.m_sCvn2, estCardInfo.m_sTk1, estCardInfo.m_sTk2, estCardInfo.m_sTk3, 
+            estCardInfo.m_fForegift * 100 );
+
+    CalcDac( aczBuf, strlen(aczBuf), opczDac );
+
+    return 0;
+}
+int  Check_SVC_CardInfo_Dac( T_SVC_CardInfo estCardInfo )
+{
+    char  aczDac[17];
+
+    memset( aczDac, 0, sizeof(aczDac) );
+    Gen_SVC_CardInfo_Dac( estCardInfo, aczDac );
+
+    if( memcmp( aczDac, estCardInfo.m_sDac, 16 ) != 0 )
+    {
+        LOG4C(( LOG_FATAL, "[%s][%s]", aczDac, estCardInfo.m_sDac ));
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
+   *SVC_AccountInfo表校验
+   * 账户标识20个字节+卡BIN类型12个字节+总金额12个字节+可用金额12个字节+ 日期时间14个字节
+   * 所有浮点型字段，均是12个字节，前补0
+   * 所有字符型字段，均是左对齐，后补空格
+   */
+int  Gen_SVC_AccountInfo_Dac( T_SVC_AccountInfo estAccountInfo, char *opczDac )
+{
+    char  aczBuf[200];
+
+    memset( aczBuf, 0, sizeof(aczBuf) );
+
+    sprintf( aczBuf, "%-20.20s%-12.12s%012.0f%012.0f%-14.14s",
+            estAccountInfo.m_sAccountId, estAccountInfo.m_sCardBin, estAccountInfo.m_fTotalValue*100, 
+            estAccountInfo.m_fUseValue*100, estAccountInfo.m_sUpdateTime );
+
+    CalcDac( aczBuf, strlen(aczBuf), opczDac );
+
+    return 0;
+}
+int  Check_SVC_AccountInfo_Dac( T_SVC_AccountInfo estAccountInfo )
+{
+    char  aczDac[17];
+
+    memset( aczDac, 0, sizeof(aczDac) );
+    Gen_SVC_AccountInfo_Dac( estAccountInfo, aczDac );
+
+    if( memcmp( aczDac, estAccountInfo.m_sDac, 16 ) != 0 )
+    {
+        LOG4C(( LOG_FATAL, "[%s][%s]", aczDac, estAccountInfo.m_sDac ));
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
+   *SVC_Integral表校验
+   * 账户标识20个字节+积分数量类型12个字节+有效期8个字节+ 日期时间14个字节
+   * 所有浮点型字段,整形，均是12个字节，前补0
+   * 所有字符型字段，均是左对齐，后补空格
+   */
+int  Gen_SVC_Integral_Dac( T_SVC_Integral estIntegral, char *opczDac )
+{
+    char  aczBuf[200];
+
+    memset( aczBuf, 0, sizeof(aczBuf) );
+
+    sprintf( aczBuf, "%-20.20s%012d%-8.8s%-14.14s",
+            estIntegral.m_sAccountId, estIntegral.m_nScore, estIntegral.m_sValidDate, 
+            estIntegral.m_sUpdateTime );
+
+    CalcDac( aczBuf, strlen(aczBuf), opczDac );
+
+    return 0;
+}
+int  Check_SVC_Integral_Dac( T_SVC_Integral estIntegral )
+{
+    char  aczDac[17];
+
+    memset( aczDac, 0, sizeof(aczDac) );
+    Gen_SVC_Integral_Dac( estIntegral, aczDac );
+
+    if( memcmp( aczDac, estIntegral.m_sDac, 16 ) != 0 )
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+
+/*
+   *SVC_CardAccount表校验
+   * 账户标识20个字节+卡号32个字节  
+   * 所有浮点型字段,整形，均是12个字节，前补0
+   * 所有字符型字段，均是左对齐，后补空格
+   */
+int  Gen_SVC_CardAccount_Dac( T_SVC_CardAccount estCardAccount, char *opczDac )
+{
+    char  aczBuf[200];
+
+    memset( aczBuf, 0, sizeof(aczBuf) );
+
+    sprintf( aczBuf, "%-20.20s%-32.32s",
+            estCardAccount.m_sAccountId, estCardAccount.m_sCardNo  );
+
+    CalcDac( aczBuf, strlen(aczBuf), opczDac );
+
+    return 0;
+}
+int  Check_SVC_CardAccount_Dac( T_SVC_CardAccount estCardAccount )
+{
+    char  aczDac[17];
+
+    memset( aczDac, 0, sizeof(aczDac) );
+    Gen_SVC_CardAccount_Dac( estCardAccount, aczDac );
+
+    if( memcmp( aczDac, estCardAccount.m_sDac, 16 ) != 0 )
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
+   *SVC_AccDetail表校验
+   * 平台流水12个字节，平台日期8个字节，交易处理码6个字节，商户号15 终端号8，卡号32， 交易金额12， 余额12， 系统日期时间14， 
+   * 所有浮点型字段,整形，均是12个字节，前补0
+   * 所有字符型字段，均是左对齐，后补空格
+   */
+int  Gen_SVC_AccDetail_Dac( T_SVC_AccDetail estAccDetail, char *opczDac )
+{
+    char  aczBuf[200];
+
+    memset( aczBuf, 0, sizeof(aczBuf) );
+
+    sprintf( aczBuf, "%012d%-8.8s%-6.6s%-15.15s%-8.8s%-32.32s%012.0f%012.0f%-8.8s%-6.6s",
+            estAccDetail.m_nPtSerial, estAccDetail.m_sPtDate,  estAccDetail.m_sHoTxCode, estAccDetail.m_sMerchantId,
+            estAccDetail.m_sTerminalId, estAccDetail.m_sCardNo,  estAccDetail.m_fTxAmt*100, estAccDetail.m_fBalAmt*100,
+            estAccDetail.m_sSysDate, estAccDetail.m_sSysTime  );
+
+    CalcDac( aczBuf, strlen(aczBuf), opczDac );
+
+    return 0;
+}
+int  Check_SVC_AccDetail_Dac( T_SVC_AccDetail estAccDetail )
+{
+    char  aczDac[17];
+
+    memset( aczDac, 0, sizeof(aczDac) );
+    Gen_SVC_AccDetail_Dac( estAccDetail, aczDac );
+
+    if( memcmp( aczDac, estAccDetail.m_sDac, 16 ) != 0 )
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
+   *SVC_ShopGroup表校验
+   * groupId20个字节，leastAmt12，warnamt12，balance12
+   * 所有浮点型字段,整形，均是12个字节，前补0
+   * 所有字符型字段，均是左对齐，后补空格
+   */
+int  Gen_SVC_ShopGroup_Dac( T_SVC_ShopGroup estShopGroup, char *opczDac )
+{
+    char  aczBuf[200];
+
+    memset( aczBuf, 0, sizeof(aczBuf) );
+
+    sprintf( aczBuf, "%-20.20s%012.0f%012.0f%012.0f",
+            estShopGroup.m_sGroupId, estShopGroup.m_fLeastAmt*100,  estShopGroup.m_fWarningAmt*100, estShopGroup.m_fBalance*100);
+
+    CalcDac( aczBuf, strlen(aczBuf), opczDac );
+
+    return 0;
+}
+int  Check_SVC_ShopGroup_Dac( T_SVC_ShopGroup estShopGroup )
+{
+    char  aczDac[17];
+
+    memset( aczDac, 0, sizeof(aczDac) );
+    Gen_SVC_ShopGroup_Dac( estShopGroup, aczDac );
+
+    if( memcmp( aczDac, estShopGroup.m_sDac, 16 ) != 0 )
+    {
+        return -1;
+    }
+
+    return 0;
+}

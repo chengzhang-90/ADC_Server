@@ -1,0 +1,130 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.6	//
+ADPCLI_CONNECT_ERR	test/adc.h	/^static const int ADPCLI_CONNECT_ERR          = 6;$/;"	v
+ADPCLI_DATA_LEN_OVERFLOW	test/adc.h	/^static const int ADPCLI_DATA_LEN_OVERFLOW    = 11;$/;"	v
+ADPCLI_GEN_APR_POOL_ERR	test/adc.h	/^static const int ADPCLI_GEN_APR_POOL_ERR     = 12;$/;"	v
+ADPCLI_GEN_SOCKET_ERR	test/adc.h	/^static const int ADPCLI_GEN_SOCKET_ERR       = 15;$/;"	v
+ADPCLI_GET_SOCKADDR_INFO_ERR	test/adc.h	/^static const int ADPCLI_GET_SOCKADDR_INFO_ERR= 14;$/;"	v
+ADPCLI_NO_AVILAVLE_SERVER	test/adc.h	/^static const int ADPCLI_NO_AVILAVLE_SERVER   = 5;$/;"	v
+ADPCLI_RECV_ERR	test/adc.h	/^static const int ADPCLI_RECV_ERR             = 9;$/;"	v
+ADPCLI_SEND_ERR	test/adc.h	/^static const int ADPCLI_SEND_ERR             = 8;$/;"	v
+ADPCLI_SET_TIMEOUT_ERR	test/adc.h	/^static const int ADPCLI_SET_TIMEOUT_ERR      = 7;$/;"	v
+ADPCLI_SHUTDOWN_SOCK_ERR	test/adc.h	/^static const int ADPCLI_SHUTDOWN_SOCK_ERR    = 13;$/;"	v
+ADP_APR_UDOTrans	test/adc_client.cpp	/^int ADP_APR_UDOTrans( char *epczHost, int eiPort, char *req,  char *res,$/;"	f
+AdpClient	test/adc_client.cpp	/^AdpClient::AdpClient( char *hostIp, int hostPort, bool useBalance )$/;"	f	class:AdpClient
+AdpClient	test/adcclient.cpp	/^AdpClient::AdpClient( char *hostIp, int hostPort, bool useBalance )$/;"	f	class:AdpClient
+BINARY	adc_global.cpp	/^typedef enum _FTYPE { STRING, SHORT, INT, LONG, FLOAT, DOUBLE, BINARY } FTYPE;$/;"	e	enum:_FTYPE	file:
+CONNECT_BALANCE_SERVER_ERR	test/adc.h	/^static const int CONNECT_BALANCE_SERVER_ERR  = 1;$/;"	v
+CONNECT_BUSINESS_SERVER_ERR	test/adc.h	/^static const int CONNECT_BUSINESS_SERVER_ERR = 2;$/;"	v
+DOUBLE	adc_global.cpp	/^typedef enum _FTYPE { STRING, SHORT, INT, LONG, FLOAT, DOUBLE, BINARY } FTYPE;$/;"	e	enum:_FTYPE	file:
+FLOAT	adc_global.cpp	/^typedef enum _FTYPE { STRING, SHORT, INT, LONG, FLOAT, DOUBLE, BINARY } FTYPE;$/;"	e	enum:_FTYPE	file:
+FTYPE	adc_global.cpp	/^typedef enum _FTYPE { STRING, SHORT, INT, LONG, FLOAT, DOUBLE, BINARY } FTYPE;$/;"	t	typeref:enum:_FTYPE	file:
+GetCurrentMillTime	test/adc_cliya.cpp	/^double GetCurrentMillTime()$/;"	f
+INT	adc_global.cpp	/^typedef enum _FTYPE { STRING, SHORT, INT, LONG, FLOAT, DOUBLE, BINARY } FTYPE;$/;"	e	enum:_FTYPE	file:
+LONG	adc_global.cpp	/^typedef enum _FTYPE { STRING, SHORT, INT, LONG, FLOAT, DOUBLE, BINARY } FTYPE;$/;"	e	enum:_FTYPE	file:
+MAXPROCS	test/adc_cliya.cpp	9;"	d	file:
+MAX_BUFF_SIZE	test/adc.h	/^static const int MAX_BUFF_SIZE = 131072;   \/\/128K$/;"	v
+NO_ERR	test/adc.h	/^static const int NO_ERR                      = 0;$/;"	v
+RECV_LEN	test/adc.h	11;"	d
+SERVICE_NAME_ERR	test/adc.h	/^static const int SERVICE_NAME_ERR            = 10;$/;"	v
+SHORT	adc_global.cpp	/^typedef enum _FTYPE { STRING, SHORT, INT, LONG, FLOAT, DOUBLE, BINARY } FTYPE;$/;"	e	enum:_FTYPE	file:
+STRING	adc_global.cpp	/^typedef enum _FTYPE { STRING, SHORT, INT, LONG, FLOAT, DOUBLE, BINARY } FTYPE;$/;"	e	enum:_FTYPE	file:
+STRLEN	adc_cmd.cpp	27;"	d	file:
+TIME_OUT_BALANCE_SERVER	test/adc.h	/^static const int TIME_OUT_BALANCE_SERVER     = 3;$/;"	v
+TIME_OUT_BUSINESS_SERVER	test/adc.h	/^static const int TIME_OUT_BUSINESS_SERVER    = 4;$/;"	v
+Value	adc_global.cpp	/^   } Value;$/;"	m	struct:_Vairable	typeref:union:_Vairable::_Value	file:
+Variable	adc_global.cpp	/^typedef struct _Vairable Variable;$/;"	t	typeref:struct:_Vairable	file:
+_FTYPE	adc_global.cpp	/^typedef enum _FTYPE { STRING, SHORT, INT, LONG, FLOAT, DOUBLE, BINARY } FTYPE;$/;"	g	file:
+_Vairable	adc_global.cpp	/^struct _Vairable$/;"	s	file:
+_Value	adc_global.cpp	/^   union _Value$/;"	u	struct:_Vairable	file:
+__APPLICATION_DEVELOPMENT_PLATFORM_H__	test/adc.h	9;"	d
+addBinary	adc_global.cpp	/^int addBinary( char *pczName, void *pValue, int iLen )$/;"	f
+addDouble	adc_global.cpp	/^int addDouble( char *pczName, double dValue )$/;"	f
+addFloat	adc_global.cpp	/^int addFloat( char *pczName, float fValue )$/;"	f
+addInt	adc_global.cpp	/^int addInt( char *pczName, int iValue )$/;"	f
+addLong	adc_global.cpp	/^int addLong( char *pczName, long lValue )$/;"	f
+addShort	adc_global.cpp	/^int addShort( char *pczName, short shValue )$/;"	f
+addString	adc_global.cpp	/^int addString( char *pczName, char *pczValue )$/;"	f
+addVariable	adc_global.cpp	/^void addVariable( Variable * pstVariable )$/;"	f
+ap_basename	adc_base.cpp	/^char *ap_basename(char *str)$/;"	f
+ap_tcp_read	adc_base.cpp	/^int ap_tcp_read ( apr_socket_t *sock, char *buf, int len )$/;"	f
+ap_tcp_write	adc_base.cpp	/^int ap_tcp_write ( apr_socket_t *sock, char *buf, int len )$/;"	f
+atExitFun	adc_handle.cpp	/^void atExitFun( void )$/;"	f
+call	test/adc_client.cpp	/^int AdpClient::call( char *svcName, char *tranCode, UDP req, $/;"	f	class:AdpClient
+call	test/adcclient.cpp	/^int AdpClient::call( char *svcName,  UDP req, $/;"	f	class:AdpClient
+fileExistAndExec	adc_base.cpp	/^bool fileExistAndExec( char *pczFile )$/;"	f
+getAxpSerial	adc_base.cpp	/^int getAxpSerial( char *pczSerial, char *pczTxDate, apr_pool_t *pstPool )$/;"	f
+getBinary	adc_global.cpp	/^int getBinary( char *pczName, void *pValue, int *piLen )$/;"	f
+getDouble	adc_global.cpp	/^int getDouble( char *pczName, double *pdValue )$/;"	f
+getFloat	adc_global.cpp	/^int getFloat( char *pczName, float *pfValue )$/;"	f
+getInt	adc_global.cpp	/^int getInt( char *pczName, int *piValue )$/;"	f
+getLength	adc_global.cpp	/^int getLength( char *pczName )$/;"	f
+getLong	adc_global.cpp	/^int getLong( char *pczName, long *plValue )$/;"	f
+getShort	adc_global.cpp	/^int getShort( char *pczName, short int *pshValue )$/;"	f
+getString	adc_global.cpp	/^int getString( char *pczName, char *pczValue )$/;"	f
+getVariable	adc_global.cpp	/^Variable *getVariable( char *pczName )$/;"	f
+globalInit	adc_global.cpp	/^void globalInit( void )$/;"	f
+gpstGlobalVariablePool	adc_global.cpp	/^apr_pool_t *gpstGlobalVariablePool;$/;"	v
+init	test/adc_client.cpp	/^int AdpClient::init( char *sysName )$/;"	f	class:AdpClient
+init	test/adcclient.cpp	/^int AdpClient::init( char *sysName )$/;"	f	class:AdpClient
+loadEnviorment	adc_base.cpp	/^void loadEnviorment( char *moduleName )$/;"	f
+m_binary	adc_global.cpp	/^      char     *m_binary;$/;"	m	union:_Vairable::_Value	file:
+m_double	adc_global.cpp	/^      double    m_double;$/;"	m	union:_Vairable::_Value	file:
+m_float	adc_global.cpp	/^      float     m_float;$/;"	m	union:_Vairable::_Value	file:
+m_int	adc_global.cpp	/^      int       m_int;$/;"	m	union:_Vairable::_Value	file:
+m_long	adc_global.cpp	/^      long      m_long;$/;"	m	union:_Vairable::_Value	file:
+m_pczName	adc_global.cpp	/^   char *m_pczName;$/;"	m	struct:_Vairable	file:
+m_pstNext	adc_global.cpp	/^   Variable *m_pstNext;$/;"	m	struct:_Vairable	file:
+m_short	adc_global.cpp	/^      short int m_short;$/;"	m	union:_Vairable::_Value	file:
+m_string	adc_global.cpp	/^      char     *m_string;$/;"	m	union:_Vairable::_Value	file:
+m_tType	adc_global.cpp	/^   FTYPE m_tType;$/;"	m	struct:_Vairable	file:
+main	adc_cmd.cpp	/^int main(int argc, char *argv[])$/;"	f
+main	adc_handle.cpp	/^int main( int argc, char *argv[] )$/;"	f
+main	test/adc_cli.cpp	/^int main( int argc, char *argv[])$/;"	f
+main	test/adc_cliya.cpp	/^int main( int argc, char *argv[])$/;"	f
+makeClient	adc_base.cpp	/^int makeClient( apr_socket_t **pstClient, apr_pool_t *pstPool, char *pczServer,$/;"	f
+makeListener	adc_base.cpp	/^int makeListener( apr_socket_t **pstListener, apr_pool_t *pstPool,$/;"	f
+matchFunName	adc_handle.cpp	/^int matchFunName( char *pczFunName )$/;"	f
+onSysEnd	adc_hooks.cpp	/^int onSysEnd( void )$/;"	f
+onSysStart	adc_hooks.cpp	/^int onSysStart( char *pczExecFile )$/;"	f
+onTxEnd	adc_hooks.cpp	/^int onTxEnd( void )$/;"	f
+onTxStart	adc_hooks.cpp	/^int onTxStart( char *pczExecFile )$/;"	f
+pcShmAddr	adc_handle.cpp	/^char *pcShmAddr = NULL; \/*系统一个全局变量 *\/$/;"	v
+pstClient	adc_handle.cpp	/^apr_socket_t *pstClient;$/;"	v
+pstGlobalPool	adc_handle.cpp	/^apr_pool_t *pstGlobalPool;$/;"	v
+pstLocalPool	adc_handle.cpp	/^apr_pool_t *pstLocalPool;$/;"	v
+readDataFromFile	test/adc_cli.cpp	/^void readDataFromFile( UDP req, char *filename )$/;"	f
+readDataFromFile	test/adc_cliya.cpp	/^void readDataFromFile( UDP req, char *filename )$/;"	f
+readDouble	test/adc_cli.cpp	/^double readDouble( char *p )$/;"	f
+readDouble	test/adc_cliya.cpp	/^double readDouble( char *p )$/;"	f
+readKeyword	test/adc_cli.cpp	/^int readKeyword( char **p )$/;"	f
+readKeyword	test/adc_cliya.cpp	/^int readKeyword( char **p )$/;"	f
+readLong	test/adc_cli.cpp	/^long readLong( char *p )$/;"	f
+readLong	test/adc_cliya.cpp	/^long readLong( char *p )$/;"	f
+recvData	adc_handle.cpp	/^int recvData( apr_socket_t *pstClient, char *pczRecvBuff, int iDataLen )$/;"	f
+recvDataSize	adc_handle.cpp	/^int recvDataSize( apr_socket_t *pstClient )$/;"	f
+recvDataSize	test/adc_client.cpp	/^int AdpClient::recvDataSize( int iInitSize )$/;"	f	class:AdpClient
+recvDataSize	test/adcclient.cpp	/^int AdpClient::recvDataSize( int iInitSize )$/;"	f	class:AdpClient
+recvHead	adc_handle.cpp	/^int recvHead( apr_socket_t *pstClient, char *pczFunName, char *pczTranCode )$/;"	f
+run	adc_handle.cpp	/^void run( ProcessRegister *pstProcess, apr_socket_t *pstListener,$/;"	f
+sendData	adc_handle.cpp	/^int sendData( apr_socket_t *pstClient, char *pczSendBuff, int iDataLen )$/;"	f
+sendDataSize	adc_handle.cpp	/^int sendDataSize( apr_socket_t *pstClient, int iDataLen )$/;"	f
+sendDataSize	test/adc_client.cpp	/^int AdpClient::sendDataSize( int iLen )$/;"	f	class:AdpClient
+sendDataSize	test/adcclient.cpp	/^int AdpClient::sendDataSize( int iLen )$/;"	f	class:AdpClient
+sendSvcHead	test/adc_client.cpp	/^int AdpClient::sendSvcHead( char *pczSvcHead )$/;"	f	class:AdpClient
+sendSvcName	test/adcclient.cpp	/^int AdpClient::sendSvcName( char *pczSvcName )$/;"	f	class:AdpClient
+setupSignal	adc_handle.cpp	/^void setupSignal( void )$/;"	f
+shm_get	adc_base.cpp	/^void * shm_get( int iShmKey, int iSize )$/;"	f
+sig_usr1	adc_handle.cpp	/^void sig_usr1( int iSignal )$/;"	f
+stHead	adc_global.cpp	/^static Variable stHead;$/;"	v	file:
+stTxnPara	adc_handle.cpp	/^AdpTxnPara stTxnPara;$/;"	v
+strcasecmp	test/adc_cli.cpp	/^int strcasecmp( char *s1, char *s2 )$/;"	f
+strcasecmp	test/adc_cliya.cpp	/^int strcasecmp( char *s1, char *s2 )$/;"	f
+strncasecmp	test/adc_cli.cpp	/^int strncasecmp( char *s1, char *s2, int len )$/;"	f
+strncasecmp	test/adc_cliya.cpp	/^int strncasecmp( char *s1, char *s2, int len )$/;"	f
+~AdpClient	test/adc_client.cpp	/^AdpClient::~AdpClient( void )$/;"	f	class:AdpClient
+~AdpClient	test/adcclient.cpp	/^AdpClient::~AdpClient( void )$/;"	f	class:AdpClient

@@ -1,0 +1,5 @@
+---- doTermLogin Matches (4 in 2 files) ----
+Adc_public.pc (products\miteno):	nRet=doTermLogin(pstReq, pstRsp);	
+Adc_public.pc (products\miteno):    LOG4C(( LOG_DEBUG, "doTermLogin[%d][%s]", pstRsp->nResp,pstRsp->szRespInfo));
+Apayfunc.c (newpaylib):int doTermLogin(ST_TERM_LOGIN_REQ *pstReq, ST_TERM_LOGIN_RSP *pstRsp)
+Apayfunc.c (newpaylib):	LOG4C(( LOG_DEBUG, "doTermLogin"));

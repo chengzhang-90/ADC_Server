@@ -1,0 +1,268 @@
+/******************************************************************
+ * 交易名称: 百度扫码付
+ * 生成日期: 2015-7-16 09:31:04
+ * 作    者: zhouhd
+ ******************************************************************/
+
+#include <string.h>
+#include <stdlib.h>
+#include "adc_syserr.h"
+#include "udo.h"
+#include "log.h"
+#include "adc_syserr.h"
+#include "pub_base.h"
+#include "dic_public.h"
+#include "dic_account.h"
+#include "common.h"
+#include "adc_global.h"
+#include "svc_define.h"
+#include "apyfunc.h"
+	 
+EXEC SQL INCLUDE SQLCA;
+
+EXEC SQL include "svc_struct.h";
+
+
+#define CHECK_HAVE_ALL_FIELD( aczTranCode, pstInList, pstOutList )\
+{\
+    int nTmpVar = 0;\
+    int FIELD_ID_LIST[] =\
+    {\
+        PROCESSCODE,\
+        MERCHANTID,\
+        TERMID,\
+        TXDATE,\
+        TXTIME,\
+        OPERID,\
+        SERIAL,\
+        BATCHNO,\
+        CHANNELID,\
+        TXAMT,\
+        CHDATE,\
+        CHTIME,\
+        CHTXCODE,\
+        CHSERIAL,\
+        CODEURL,\
+    };\
+    for( nTmpVar = 0; nTmpVar < sizeof(FIELD_ID_LIST)/sizeof(int); nTmpVar++ )\
+    {\
+        if( !UDO_FieldExist( pstInList, FIELD_ID_LIST[nTmpVar] ) )\
+        {\
+            char aczRetCode[30], aczRetMessage[40];\
+            sprintf( aczRetCode, "%s%03d", aczTranCode, NO_REQUIRED_FIELD );\
+            sprintf( aczRetMessage, "缺少要求的字段 %d", FIELD_ID_LIST[nTmpVar] );\
+            LOG4C(( LOG_WARN, "%s", aczRetMessage ));\
+            UDO_AddField( pstOutList, RESPONSE, UDT_STRING, aczRetCode, 9 );\
+            UDO_AddField( pstOutList, RETMSG, UDT_STRING, aczRetMessage,strlen(aczRetMessage) );\
+            return -1;\
+        }\
+    }\
+}
+
+int adc_211022_main(UDP epstInList, UDP opstOutList)
+{
+    int nRet=0,nLen=0;
+    EXEC SQL BEGIN DECLARE SECTION;
+    char    I_ProcessCode[6+1];                 /* 处理码 */
+    char    I_MerchantId[15+1];                 /* 商户号 */
+    char    I_TermId[8+1];                      /* 终端号 */
+    char    I_TxDate[8+1];                      /* 平台账务日期 */
+    char    I_TxTime[6+1];                      /* 交易时间 */
+    char    I_OperId[12+1];                     /* 操作员号 */
+    char    I_Serial[12+1];                     /* 平台流水号 */
+    char    I_BatchNo[8+1];                     /* 批次号 */
+    char    I_Channelid[3+1];                   /* 渠道号 */
+    char    I_TxAmt[12+1];                      /* 交易金额 */
+    char    I_ChDate[8+1];                      /* 渠道日期 */
+    char    I_ChTime[6+1];                      /* 渠道时间 */
+    char    I_ChTxCode[6+1];                    /* 渠道处理码 */
+    char    I_ChSerial[6+1];                    /* 渠道流水 */
+    char    I_codeurl[200+1];                   /* 二维码链接 */
+    char    O_Response[10+1];                   /* 响应代码 */
+    char    O_RetMsg[64+1];                     /* 响应信息 */
+    char    O_TxAmt[12+1];                      /* 交易金额 */
+    char    O_RefNum[12+1];                     /* 主机参考号 */
+    char    O_HoDate[8+1];                      /* 主机日期 */
+    char    O_HoTime[6+1];                      /* 主机时间 */
+    char    O_outtradeno[50+1];                 /* 商户订单号 */
+    T_SVC_Miteno_Terminal stTerm;
+    char    aczCurPosTrace[7];
+    EXEC SQL END DECLARE SECTION;
+    /*请在此添加EC变量*/
+	ST_BAIDU_PAY_REQ req;
+	ST_BAIDU_PAY_RSP rsp;
+
+    CHECK_HAVE_ALL_FIELD( "adc_211022", epstInList, opstOutList )
+
+
+    memset( I_ProcessCode, 0, sizeof(I_ProcessCode) );
+    memset( I_MerchantId, 0, sizeof(I_MerchantId) );
+    memset( I_TermId, 0, sizeof(I_TermId) );
+    memset( I_TxDate, 0, sizeof(I_TxDate) );
+    memset( I_TxTime, 0, sizeof(I_TxTime) );
+    memset( I_OperId, 0, sizeof(I_OperId) );
+    memset( I_Serial, 0, sizeof(I_Serial) );
+    memset( I_BatchNo, 0, sizeof(I_BatchNo) );
+    memset( I_Channelid, 0, sizeof(I_Channelid) );
+    memset( I_TxAmt, 0, sizeof(I_TxAmt) );
+    memset( I_ChDate, 0, sizeof(I_ChDate) );
+    memset( I_ChTime, 0, sizeof(I_ChTime) );
+    memset( I_ChTxCode, 0, sizeof(I_ChTxCode) );
+    memset( I_ChSerial, 0, sizeof(I_ChSerial) );
+    memset( I_codeurl, 0, sizeof(I_codeurl) );
+    memset( O_Response, 0, sizeof(O_Response) );
+    memset( O_RetMsg, 0, sizeof(O_RetMsg) );
+    memset( O_TxAmt, 0, sizeof(O_TxAmt) );
+    memset( O_RefNum, 0, sizeof(O_RefNum) );
+    memset( O_HoDate, 0, sizeof(O_HoDate) );
+    memset( O_HoTime, 0, sizeof(O_HoTime) );
+    memset( O_outtradeno, 0, sizeof(O_outtradeno) );
+
+    /*取域<1-处理码>的值*/
+    UDO_GetField( epstInList, PROCESSCODE, 0, I_ProcessCode, &nLen );
+
+    /*取域<4-商户号>的值*/
+    UDO_GetField( epstInList, MERCHANTID, 0, I_MerchantId, &nLen );
+
+    /*取域<5-终端号>的值*/
+    UDO_GetField( epstInList, TERMID, 0, I_TermId, &nLen );
+
+    /*取域<12-平台账务日期>的值*/
+    UDO_GetField( epstInList, TXDATE, 0, I_TxDate, &nLen );
+
+    /*取域<13-交易时间>的值*/
+    UDO_GetField( epstInList, TXTIME, 0, I_TxTime, &nLen );
+
+    /*取域<14-操作员号>的值*/
+    UDO_GetField( epstInList, OPERID, 0, I_OperId, &nLen );
+
+    /*取域<15-平台流水号>的值*/
+    UDO_GetField( epstInList, SERIAL, 0, I_Serial, &nLen );
+
+    /*取域<16-批次号>的值*/
+    UDO_GetField( epstInList, BATCHNO, 0, I_BatchNo, &nLen );
+
+    /*取域<17-渠道号>的值*/
+    UDO_GetField( epstInList, CHANNELID, 0, I_Channelid, &nLen );
+
+    /*取域<24-交易金额>的值*/
+    UDO_GetField( epstInList, TXAMT, 0, I_TxAmt, &nLen );
+
+    /*取域<26-渠道日期>的值*/
+    UDO_GetField( epstInList, CHDATE, 0, I_ChDate, &nLen );
+
+    /*取域<27-渠道时间>的值*/
+    UDO_GetField( epstInList, CHTIME, 0, I_ChTime, &nLen );
+
+    /*取域<32-渠道处理码>的值*/
+    UDO_GetField( epstInList, CHTXCODE, 0, I_ChTxCode, &nLen );
+
+    /*取域<33-渠道流水>的值*/
+    UDO_GetField( epstInList, CHSERIAL, 0, I_ChSerial, &nLen );
+
+    /*取域<80-二维码链接>的值*/
+    UDO_GetField( epstInList, CODEURL, 0, I_codeurl, &nLen );
+
+    /*
+     * TODO: 在此添加绘制代码
+     */
+
+
+	memcpy(O_HoDate, I_ChDate, 8);
+	memcpy(O_HoTime, I_ChTime, 6);
+
+	memset((char *)&stTerm, 0, sizeof(stTerm));
+	
+	sprintf(O_RefNum, "%6.6s%06d", I_TxTime, atol(I_Serial)% 999999 );
+	
+	nRet = GetMitenoTermInfo( I_TermId, I_MerchantId, &stTerm, O_RetMsg );
+	if( nRet != 0 )
+	{
+		strcpy( O_Response, "211022001" );
+		goto ErrorOut;
+	}
+	if( stTerm.m_sStatus[0] != '0' )
+	{
+		strcpy( O_Response, "211022002" );
+		strcpy( O_RetMsg, "该终端已经限制接入" );
+		goto ErrorOut;
+	}
+	
+	sprintf( aczCurPosTrace, "%06d", atoi( I_ChSerial ) + 1 );
+	EXEC SQL UPDATE Svc_Miteno_Terminal set PosTrace= :aczCurPosTrace
+			WHERE Code = :stTerm.m_sTermId AND	Merchant_Code=:stTerm.m_sMerchantId;
+	if( SQLCODE )
+	{
+		strcpy( O_Response, "211022003" );
+		strcpy( O_RetMsg, "更新终端当前流水出错" );
+		LOG4C(( LOG_FATAL, "SQLCODE[%d][%s][%s]", SQLCODE, stTerm.m_sTermId, stTerm.m_sMerchantId ));
+		EXEC SQL ROLLBACK WORK;
+		goto ErrorOut;
+	}
+	EXEC SQL COMMIT WORK;
+	
+	memset((char *)&req, 0, sizeof(req));
+	memset((char *)&rsp, 0, sizeof(rsp));
+	
+	memcpy(req.szTransCode, I_ProcessCode, 6);
+	memcpy(req.szMerchantID, I_MerchantId, 15);
+	memcpy(req.szTermID, I_TermId, 8);
+	memcpy(req.szDate, O_HoDate, 8);
+	memcpy(req.szTime, O_HoTime, 6);
+	memcpy(req.szTrace, I_ChSerial, 6);
+	memcpy(req.szBatchNo, I_BatchNo, 6);
+	memcpy(req.szRefNum, O_RefNum, 12);
+	memcpy(req.szAmount, I_TxAmt, 12);
+	strcpy(req.szAuthCode, I_codeurl);
+
+	nRet = doBaiduPay(&req, &rsp);
+	
+    LOG4C(( LOG_DEBUG, "doBaiduPay[%d][%s]", rsp.nResp, rsp.szRespInfo));
+	
+	if(nRet != 0)
+	{
+	   strcpy( O_Response, "211022004" );
+	   strcpy( O_RetMsg, "系统故障" );
+	   goto ErrorOut;
+	}
+   
+	if(rsp.nResp != 0)
+	{
+	  strcpy( O_Response, "211022005" );
+	  strncpy(O_RetMsg, rsp.szRespInfo, 40);	  
+	  goto ErrorOut;
+	}
+	
+	memcpy(O_HoDate, rsp.szHostDate, 8);
+	memcpy(O_HoTime, rsp.szHostTime, 6);
+	strcpy(O_outtradeno, rsp.szOutTradeNo);
+	strcpy(O_TxAmt, I_TxAmt);
+	strcpy( O_Response, "000000000" );
+	strcpy(O_RetMsg, "交易成功");
+
+
+ErrorOut:
+
+    /*给域<2-响应代码>赋值*/
+    UDO_AddField( opstOutList, RESPONSE, UDT_STRING, O_Response, strlen(O_Response) );
+
+    /*给域<3-响应信息>赋值*/
+    UDO_AddField( opstOutList, RETMSG, UDT_STRING, O_RetMsg, strlen(O_RetMsg) );
+
+    /*给域<24-交易金额>赋值*/
+    UDO_AddField( opstOutList, TXAMT, UDT_STRING, O_TxAmt, strlen(O_TxAmt) );
+
+    /*给域<58-主机参考号>赋值*/
+    UDO_AddField( opstOutList, REFNUM, UDT_STRING, O_RefNum, strlen(O_RefNum) );
+
+    /*给域<72-主机日期>赋值*/
+    UDO_AddField( opstOutList, HODATE, UDT_STRING, O_HoDate, strlen(O_HoDate) );
+
+    /*给域<73-主机时间>赋值*/
+    UDO_AddField( opstOutList, HOTIME, UDT_STRING, O_HoTime, strlen(O_HoTime) );
+
+    /*给域<79-商户订单号>赋值*/
+    UDO_AddField( opstOutList, OUTTRADENO, UDT_STRING, O_outtradeno, strlen(O_outtradeno) );
+
+    return 0;
+}

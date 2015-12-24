@@ -1,0 +1,54 @@
+APR_DIR      = $(ADC_ROOT)/shlib
+APR_INCL_DIR = $(APR_DIR)/include/apr-1
+APR_LIB_DIR  = $(APR_DIR)/lib
+APR_LIB      = -L$(APR_LIB_DIR) -lapr-1
+
+XML2_DIR     = $(ADC_ROOT)/shlib
+XML2_INCL_DIR= $(XML2_DIR)/include/libxml2
+XML2_LIB_DIR = $(XML2_DIR)/lib
+XML2_LIB     = -L$(XML2_LIB_DIR) -lxml2
+
+MYSQL_DIR    = $(MYSQL_HOME)
+MYSQL_INCL_DIR = $(MYSQL_DIR)/include
+MYSQL_LIB_DIR  = $(MYSQL_DIR)/lib
+
+MSSQL_DIR    = $(SQLSERVERDIR)
+MSSQL_INCL_DIR = $(MSSQL_DIR)/include
+MSSQL_LIB_DIR  = $(MSSQL_DIR)/lib
+MSSQL_LIB = -L$(MSSQL_DIR)/lib -lsybdb 
+
+LIBXLS_DIR    = $(LIBXLSDIR)
+LIBXLS_INCL_DIR = $(LIBXLSDIR)/include
+LIBXLS_LIB_DIR  = $(LIBXLSDIR)/lib
+LIBXLS_LIB = -L$(LIBXLSDIR)/lib -lxlsreader 
+
+APAY_DIR = $(ADC_ROOT)/newpaylib
+APAY_INCL_DIR = $(APAY_DIR)
+APAY_LIB_DIR =  $(ADC_ROOT)/lib
+APAY_LIB = -L$(APAY_LIB_DIR) -lapaysoap
+
+
+ICONV_DIR = /usr/local
+ICONV_INCL_DIR = $(ICONV_DIR)/include
+ICONV_LIB_DIR = $(ICONV_DIR)/lib
+ICONV_LIB = -L$(ICONV_LIB_DIR) -liconv
+
+ADC_BIN_DIR  = $(ADC_ROOT)/bin
+ADC_LIB_DIR  = $(ADC_ROOT)/lib
+ADC_INCL_DIR = $(ADC_ROOT)/include
+
+ADCLIBS=-L$(ADC_LIB_DIR)  -ladcbase -lbase -lcommon  -L/usr/lib64 -lpthread -lfl
+ORACLE_LIB = -L$(ORACLE_HOME)/lib -lclntsh
+INFORMIX_LIB=-L$(INFORMIXDIR)/lib -L$(INFORMIXDIR)/lib/esql -lifsql -lifasf -lifgen -lifos -lifgls -ltli -lc_r -lmsaa -lbsd -ldl -lm_r /home/informix/lib/esql/checkapi.o -lifglx
+
+
+CC      = cc
+CXX     = g++
+EC      = /home/nladc/bin/esql
+PROC    = proc
+CFLAGS  = -g 
+LDFLAGS  = -g
+
+INCPATH = -I$(ADC_INCL_DIR) -I$(APR_INCL_DIR) -I$(XML2_INCL_DIR) -I$(APAY_INCL_DIR) -I$(ICONV_INCL_DIR)
+
+AR = ar rv

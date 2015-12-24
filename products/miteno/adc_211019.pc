@@ -1,0 +1,349 @@
+/******************************************************************
+ * 交易名称: 记录交易流水
+ * 生成日期: 2015-6-16 15:09:22
+ * 作    者: zhouhd
+ ******************************************************************/
+
+#include <string.h>
+#include <stdlib.h>
+#include "adc_syserr.h"
+#include "udo.h"
+#include "log.h"
+#include "adc_syserr.h"
+#include "pub_base.h"
+#include "dic_public.h"
+#include "dic_account.h"
+#include "common.h"
+#include "adc_global.h"
+#include "svc_define.h"
+
+EXEC SQL INCLUDE SQLCA;
+
+EXEC SQL include "svc_struct.h";
+
+
+#define CHECK_HAVE_ALL_FIELD( aczTranCode, pstInList, pstOutList )\
+{\
+    int nTmpVar = 0;\
+    int FIELD_ID_LIST[] =\
+    {\
+        PROCESSCODE,\
+        MERCHANTID,\
+        TERMID,\
+        TXDATE,\
+        TXTIME,\
+        OPERID,\
+        SERIAL,\
+        BATCHNO,\
+        CHANNELID,\
+        ACCTNO,\
+        PERIOD,\
+        TXAMT,\
+        CHDATE,\
+        CHTIME,\
+        CHTXCODE,\
+        CHSERIAL,\
+        STATUS,\
+        OLDPROCESSCODE,\
+        MSGID,\
+        TK1,\
+        TK2,\
+        TK3,\
+        SYSDATE,\
+        SETTLEID,\
+        AUTHNO,\
+        TELNO,\
+        COUPONID,\
+    };\
+    for( nTmpVar = 0; nTmpVar < sizeof(FIELD_ID_LIST)/sizeof(int); nTmpVar++ )\
+    {\
+        if( !UDO_FieldExist( pstInList, FIELD_ID_LIST[nTmpVar] ) )\
+        {\
+            char aczRetCode[30], aczRetMessage[40];\
+            sprintf( aczRetCode, "%s%03d", aczTranCode, NO_REQUIRED_FIELD );\
+            sprintf( aczRetMessage, "缺少要求的字段 %d", FIELD_ID_LIST[nTmpVar] );\
+            LOG4C(( LOG_WARN, "%s", aczRetMessage ));\
+            UDO_AddField( pstOutList, RESPONSE, UDT_STRING, aczRetCode, 9 );\
+            UDO_AddField( pstOutList, RETMSG, UDT_STRING, aczRetMessage,strlen(aczRetMessage) );\
+            return -1;\
+        }\
+    }\
+}
+
+int adc_211019_main(UDP epstInList, UDP opstOutList)
+{
+    int nRet=0,nLen=0;
+    EXEC SQL BEGIN DECLARE SECTION;
+    char    I_ProcessCode[6+1];                 /* 处理码 */
+    char    I_MerchantId[15+1];                 /* 商户号 */
+    char    I_TermId[8+1];                      /* 终端号 */
+    char    I_TxDate[8+1];                      /* 平台账务日期 */
+    char    I_TxTime[6+1];                      /* 交易时间 */
+    char    I_OperId[12+1];                     /* 操作员号 */
+    char    I_Serial[12+1];                     /* 平台流水号 */
+    char    I_BatchNo[8+1];                     /* 批次号 */
+    char    I_Channelid[3+1];                   /* 渠道号 */
+    char    I_AcctNo[32+1];                     /* 交易主帐号 */
+    char    I_Period[4+1];                      /* 有效期 */
+    char    I_TxAmt[12+1];                      /* 交易金额 */
+    char    I_ChDate[8+1];                      /* 渠道日期 */
+    char    I_ChTime[6+1];                      /* 渠道时间 */
+    char    I_ChTxCode[6+1];                    /* 渠道处理码 */
+    char    I_ChSerial[6+1];                    /* 渠道流水 */
+    char    I_Status[1+1];                      /* 状态 */
+    char    I_OldProcessCode[6+1];              /* 原渠道交易处理码 */
+    char    I_Msgid[4+1];                       /* 消息类型 */
+    char    I_tk1[120+1];                       /* 磁道1 */
+    char    I_tk2[40+1];                        /* 磁道2 */
+    char    I_tk3[120+1];                       /* 磁道3 */
+    char    I_SysDate[8+1];                     /* 系统日期 */
+    char    I_SettleId[8+1];                    /* 对账标识 */
+    char    I_AuthNo[6+1];                      /* 授权码 */
+    char    I_telno[20+1];                      /* 手机号 */
+    char    I_couponid[50+1];                   /* 串码 */
+    char    O_Response[10+1];                   /* 响应代码 */
+    char    O_RetMsg[64+1];                     /* 响应信息 */
+    T_SVC_Miteno_Terminal stTerm;
+    T_SVC_Miteno_Detail   stTx;
+    EXEC SQL END DECLARE SECTION;
+    /*请在此添加EC变量*/
+
+    CHECK_HAVE_ALL_FIELD( "adc_211019", epstInList, opstOutList )
+
+
+    memset( I_ProcessCode, 0, sizeof(I_ProcessCode) );
+    memset( I_MerchantId, 0, sizeof(I_MerchantId) );
+    memset( I_TermId, 0, sizeof(I_TermId) );
+    memset( I_TxDate, 0, sizeof(I_TxDate) );
+    memset( I_TxTime, 0, sizeof(I_TxTime) );
+    memset( I_OperId, 0, sizeof(I_OperId) );
+    memset( I_Serial, 0, sizeof(I_Serial) );
+    memset( I_BatchNo, 0, sizeof(I_BatchNo) );
+    memset( I_Channelid, 0, sizeof(I_Channelid) );
+    memset( I_AcctNo, 0, sizeof(I_AcctNo) );
+    memset( I_Period, 0, sizeof(I_Period) );
+    memset( I_TxAmt, 0, sizeof(I_TxAmt) );
+    memset( I_ChDate, 0, sizeof(I_ChDate) );
+    memset( I_ChTime, 0, sizeof(I_ChTime) );
+    memset( I_ChTxCode, 0, sizeof(I_ChTxCode) );
+    memset( I_ChSerial, 0, sizeof(I_ChSerial) );
+    memset( I_Status, 0, sizeof(I_Status) );
+    memset( I_OldProcessCode, 0, sizeof(I_OldProcessCode) );
+    memset( I_Msgid, 0, sizeof(I_Msgid) );
+    memset( I_tk1, 0, sizeof(I_tk1) );
+    memset( I_tk2, 0, sizeof(I_tk2) );
+    memset( I_tk3, 0, sizeof(I_tk3) );
+    memset( I_SysDate, 0, sizeof(I_SysDate) );
+    memset( I_SettleId, 0, sizeof(I_SettleId) );
+    memset( I_AuthNo, 0, sizeof(I_AuthNo) );
+    memset( I_telno, 0, sizeof(I_telno) );
+    memset( I_couponid, 0, sizeof(I_couponid) );
+    memset( O_Response, 0, sizeof(O_Response) );
+    memset( O_RetMsg, 0, sizeof(O_RetMsg) );
+
+    /*取域<1-处理码>的值*/
+    UDO_GetField( epstInList, PROCESSCODE, 0, I_ProcessCode, &nLen );
+
+    /*取域<4-商户号>的值*/
+    UDO_GetField( epstInList, MERCHANTID, 0, I_MerchantId, &nLen );
+
+    /*取域<5-终端号>的值*/
+    UDO_GetField( epstInList, TERMID, 0, I_TermId, &nLen );
+
+    /*取域<12-平台账务日期>的值*/
+    UDO_GetField( epstInList, TXDATE, 0, I_TxDate, &nLen );
+
+    /*取域<13-交易时间>的值*/
+    UDO_GetField( epstInList, TXTIME, 0, I_TxTime, &nLen );
+
+    /*取域<14-操作员号>的值*/
+    UDO_GetField( epstInList, OPERID, 0, I_OperId, &nLen );
+
+    /*取域<15-平台流水号>的值*/
+    UDO_GetField( epstInList, SERIAL, 0, I_Serial, &nLen );
+
+    /*取域<16-批次号>的值*/
+    UDO_GetField( epstInList, BATCHNO, 0, I_BatchNo, &nLen );
+
+    /*取域<17-渠道号>的值*/
+    UDO_GetField( epstInList, CHANNELID, 0, I_Channelid, &nLen );
+
+    /*取域<22-交易主帐号>的值*/
+    UDO_GetField( epstInList, ACCTNO, 0, I_AcctNo, &nLen );
+
+    /*取域<23-有效期>的值*/
+    UDO_GetField( epstInList, PERIOD, 0, I_Period, &nLen );
+
+    /*取域<24-交易金额>的值*/
+    UDO_GetField( epstInList, TXAMT, 0, I_TxAmt, &nLen );
+
+    /*取域<26-渠道日期>的值*/
+    UDO_GetField( epstInList, CHDATE, 0, I_ChDate, &nLen );
+
+    /*取域<27-渠道时间>的值*/
+    UDO_GetField( epstInList, CHTIME, 0, I_ChTime, &nLen );
+
+    /*取域<32-渠道处理码>的值*/
+    UDO_GetField( epstInList, CHTXCODE, 0, I_ChTxCode, &nLen );
+
+    /*取域<33-渠道流水>的值*/
+    UDO_GetField( epstInList, CHSERIAL, 0, I_ChSerial, &nLen );
+
+    /*取域<36-状态>的值*/
+    UDO_GetField( epstInList, STATUS, 0, I_Status, &nLen );
+
+    /*取域<47-原渠道交易处理码>的值*/
+    UDO_GetField( epstInList, OLDPROCESSCODE, 0, I_OldProcessCode, &nLen );
+
+    /*取域<49-消息类型>的值*/
+    UDO_GetField( epstInList, MSGID, 0, I_Msgid, &nLen );
+
+    /*取域<50-磁道1>的值*/
+    UDO_GetField( epstInList, TK1, 0, I_tk1, &nLen );
+
+    /*取域<51-磁道2>的值*/
+    UDO_GetField( epstInList, TK2, 0, I_tk2, &nLen );
+
+    /*取域<52-磁道3>的值*/
+    UDO_GetField( epstInList, TK3, 0, I_tk3, &nLen );
+
+    /*取域<54-系统日期>的值*/
+    UDO_GetField( epstInList, SYSDATE, 0, I_SysDate, &nLen );
+
+    /*取域<56-对账标识>的值*/
+    UDO_GetField( epstInList, SETTLEID, 0, I_SettleId, &nLen );
+
+    /*取域<57-授权码>的值*/
+    UDO_GetField( epstInList, AUTHNO, 0, I_AuthNo, &nLen );
+
+    /*取域<70-手机号>的值*/
+    UDO_GetField( epstInList, TELNO, 0, I_telno, &nLen );
+
+    /*取域<71-串码>的值*/
+    UDO_GetField( epstInList, COUPONID, 0, I_couponid, &nLen );
+
+    /*
+     * TODO: 在此添加绘制代码
+     */
+	PUB_StrTrim( I_ProcessCode, ' ' );
+
+    PUB_StrTrim( I_TermId, ' ' );
+    PUB_StrTrim( I_MerchantId, ' ' );
+    PUB_StrTrim( I_OperId,  ' ' );
+    PUB_StrTrim( I_BatchNo, ' ' );
+    PUB_StrTrim( I_Channelid, ' ' );
+    PUB_StrTrim( I_ChDate, ' ' );
+    PUB_StrTrim( I_ChTime, ' ' );
+    PUB_StrTrim( I_ChTxCode, ' ' );
+    PUB_StrTrim( I_ChSerial, ' ' );
+    PUB_StrTrim( I_AcctNo, ' ' );
+    PUB_StrTrim( I_Period, ' ' );
+    PUB_StrTrim( I_SettleId, ' ' );
+    PUB_StrTrim( I_tk1, ' ' );
+    PUB_StrTrim( I_tk2, ' ' );
+    PUB_StrTrim( I_tk3, ' ' );
+    PUB_StrTrim( I_Msgid, ' ' );
+    PUB_StrTrim( I_AuthNo, ' ' );
+    PUB_StrTrim( I_telno, ' ' );
+    PUB_StrTrim( I_couponid, ' ' );
+
+	nRet = GetMitenoTermInfo( I_TermId, I_MerchantId, &stTerm, O_RetMsg );
+	if( nRet != 0 )
+	{
+		strcpy( O_Response, "211019001" );
+		goto ErrorOut;
+	}
+	if( stTerm.m_sStatus[0] != '0' )
+	{
+		strcpy( O_Response, "211019002" );
+		strcpy( O_RetMsg, "该终端已经限制接入" );
+		goto ErrorOut;
+	}
+
+
+    stTx.m_nPtSerial = atoi( I_Serial );
+
+    memcpy( stTx.m_sPtDate, I_TxDate, 8 );
+
+    memcpy( stTx.m_sMerchantId, I_MerchantId, 15 );
+
+    memcpy( stTx.m_sTerminalId, I_TermId, 8 );
+
+    stTx.m_nChCode = atoi(I_Channelid);
+
+    sprintf( stTx.m_sChMsgid, "%.*s", sizeof(stTx.m_sChMsgid)-1, I_Msgid );
+
+    sprintf( stTx.m_sChTxCode, "%.*s", sizeof(stTx.m_sChTxCode)-1, I_ChTxCode );
+
+    if( strlen( I_ChDate ) == 4 )
+    {
+        sprintf( stTx.m_sChDate, "%4.4s%4.4s", I_SysDate, I_ChDate );
+    }
+    else
+    {
+        sprintf( stTx.m_sChDate, "%.*s", sizeof(stTx.m_sChDate)-1, I_ChDate );
+    }
+
+    sprintf( stTx.m_sChTime, "%.*s", sizeof(stTx.m_sChTime)-1, I_ChTime );
+
+    sprintf( stTx.m_sChSerial, "%.*s", sizeof(stTx.m_sChSerial)-1, I_ChSerial );
+
+    sprintf( stTx.m_sChBatchNo, "%.*s", sizeof(stTx.m_sChBatchNo)-1, I_BatchNo );
+
+    memcpy( stTx.m_sSysDate, I_SysDate, 8 );
+
+    memcpy( stTx.m_sSysTime, I_TxTime, 6 );
+
+    strcpy( stTx.m_sAuthNo, I_AuthNo );
+
+    sprintf( stTx.m_sRefNum, "%6.6s%06d", I_TxTime, stTx.m_nPtSerial % 999999 );
+
+    sprintf( stTx.m_sCardNo, "%.*s", sizeof(stTx.m_sCardNo)-1, I_AcctNo );
+
+    sprintf( stTx.m_sTxTeller, "%.*s", sizeof(stTx.m_sTxTeller)-1, I_OperId );
+
+    sprintf( stTx.m_sCardNo, "%.*s", sizeof(stTx.m_sTelNo)-1, I_telno );
+
+    sprintf( stTx.m_sCardNo, "%.*s", sizeof(stTx.m_sCouponID)-1, I_couponid );
+
+    stTx.m_fTxAmt = atof(I_TxAmt)/100;
+    stTx.m_fChkAmt = 0.00;
+
+    sprintf( stTx.m_sSettleId, "%.*s", sizeof(stTx.m_sSettleId)-1, I_SettleId );
+
+    stTx.m_sStatus[0] = '0';
+
+    stTx.m_sAcctChkFlag[0] = '0';
+
+    Gen_SVC_Detail_Dac( stTx, stTx.m_sDac );
+
+    EXEC SQL INSERT INTO Svc_Miteno_detail VALUES( :stTx );
+    if( SQLCODE )
+    {
+        strcpy( O_Response, "211019003" );
+        strcpy( O_RetMsg, "记录交易明细出错" );
+        LOG4C(( LOG_FATAL, "SQLCODE[%d]", SQLCODE ));
+		LOG4C(( LOG_FATAL, "ERR[%s]",sqlca.sqlerrm.sqlerrmc));
+
+        EXEC SQL ROLLBACK WORK;
+        goto ErrorOut;
+    }
+
+    EXEC SQL COMMIT WORK;
+
+    strcpy( O_Response, "000000000" );
+    strcpy( O_RetMsg, "交易成功" );
+
+
+ErrorOut:
+
+    /*给域<2-响应代码>赋值*/
+    UDO_AddField( opstOutList, RESPONSE, UDT_STRING, O_Response, strlen(O_Response) );
+
+    /*给域<3-响应信息>赋值*/
+    UDO_AddField( opstOutList, RETMSG, UDT_STRING, O_RetMsg, strlen(O_RetMsg) );
+
+    return 0;
+}
+
+

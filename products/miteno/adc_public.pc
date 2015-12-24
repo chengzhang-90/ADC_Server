@@ -1,0 +1,265 @@
+/*******************************************************************************
+交易名称: 公共函数
+作者:renhui
+*******************************************************************************/
+#include <string.h>
+#include <stdlib.h>
+#include "udo.h"
+#include "log.h"
+#include "adc_syserr.h"
+#include "pub_base.h"
+#include "dic_public.h"
+#include "dic_account.h"
+#include "common.h"
+#include "adc_global.h"
+#include "svc_define.h"
+#include "apyfunc.h"
+
+EXEC SQL INCLUDE SQLCA;
+EXEC SQL INCLUDE  "svc_struct.h";
+
+static int ProAddCouponItem(char *pszCouponList, int *pnCouponListLen, int *pnCouponNum,int nIssID, int nCouponType, char *pszCouponID, int nAmount, int nCheckMode)
+{
+	int nOffset=0;
+	int nNum=0;
+	char szAmount[10+1];
+
+	nOffset = *pnCouponListLen;
+	nNum = *pnCouponNum;
+
+	pszCouponList[nOffset++] = nIssID%99;
+	pszCouponList[nOffset++] = nCouponType%99;
+	
+
+	strncpy(pszCouponList+nOffset, pszCouponID, 20);
+	nOffset += 20;
+
+
+	memset(szAmount, 0, sizeof(szAmount));
+	sprintf(szAmount, "%010d", nAmount);
+	
+	TOOL_ConvertAscii2BCD(szAmount,pszCouponList+nOffset,10);
+	nOffset += 5;
+
+	pszCouponList[nOffset++] = nCheckMode%99;
+
+	nNum ++;
+	
+	*pnCouponListLen = nOffset;
+	*pnCouponNum = nNum;
+	
+	return 0;
+}
+
+
+
+/*获取账户 券列表*/
+int GetCouponList(char *pszCouponInfo, int *pnLen)
+{   
+	char szCouponList[1024+1];
+	int nCouponListLen=0;
+	int nCouponNum=0;
+	int nOffset;
+	
+	memset(szCouponList, 0, sizeof(szCouponList));
+	nCouponNum = 0;
+
+	ProAddCouponItem(szCouponList, &nCouponListLen, &nCouponNum,1, 1, "123456789012345", 10000, 0);
+
+	nOffset = 0;
+	sprintf(pszCouponInfo, "%02d", nCouponNum);
+	nOffset += 2;
+
+
+	pszCouponInfo[nOffset] = '0'+nCouponNum;
+	nOffset += 1;
+	
+	pszCouponInfo[nOffset] = '0';
+	nOffset += 1;
+	
+	sprintf(pszCouponInfo+nOffset, "%03d", nCouponListLen);
+	nOffset += 3;
+
+	memcpy(pszCouponInfo+nOffset, szCouponList, nCouponListLen);
+
+	nOffset += nCouponListLen;
+	
+	*pnLen = nOffset;   
+
+    return 0;
+}
+
+
+int  DecryptionPin(  T_SVC_Miteno_Terminal estTerm,  const char *epczPin, const char *epczPan, char *epczPlainPin, char *opczMsg )
+{
+    char  aczPin[17];
+    char  aczPinKey[17];
+    char  aczPanBuf[17];
+    char  aczPinBlock[17];
+    char  aczTmp[50];
+    char  aczKeyLen[3];
+    int   nLen=0;
+    int   i=0;
+
+    memset( aczPinKey, 0, sizeof(aczPinKey) );
+    memset( aczPanBuf, 0, sizeof(aczPanBuf) );
+    memset( aczKeyLen, 0, sizeof(aczKeyLen) );
+    memset( aczPinBlock, 0, sizeof(aczPinBlock) );
+
+    
+
+    /******************获取PIN密钥*********************/
+    DecryptKey( aczPinKey,   estTerm.m_sPinKey );
+    DecryptKey( aczPinKey + 8, estTerm.m_sPinKey + 16 );
+	
+    /******************获取PANbuf**********************/
+    memset( aczTmp, 0, sizeof(aczTmp) );
+    strcpy( aczTmp, "0000" );
+    memcpy( aczTmp+4, epczPan+strlen(epczPan)-13, 12 );
+    TOOL_ConvertAscii2BCD( aczTmp, aczPanBuf, 16 );
+    /******************解密PIN**********************/
+    if( memcmp( epczPin, "\x00\x00\x00\x00\x00\x00\x00\x00", 8 ) == 0 )
+    {
+        strcpy( opczMsg, "密码为空" );
+        return _PIN_ERROR;
+    }
+
+    mydes3( epczPin, aczPinBlock, aczPinKey, 1 );
+    memset( aczPin, 0, sizeof(aczPin) );
+    for( i=0; i<8; i++ )
+    {
+        aczPin[i] = aczPinBlock[i] ^ aczPanBuf[i];
+    }
+    memset( aczTmp, 0, sizeof(aczTmp) );
+    TOOL_ConvertBCD2Ascii( aczPin, 16, aczTmp );
+    memcpy( aczKeyLen, aczTmp, 2 );
+    nLen =  atoi( aczKeyLen );
+    if( nLen <=0 || nLen > 12 )
+    {
+        strcpy( opczMsg, "密码长度格式错误" );
+        return _PIN_ERROR_FORMAT;
+    }
+    memset( aczPin, 0, sizeof(aczPin) );
+    memcpy( aczPin, aczTmp+2, nLen );
+
+    /**********************校验密码合法性****************/
+    for( i=0; i<nLen; i++ )
+    {
+        if( aczPin[i] < '0' || aczPin[i] > '9' )
+        {
+            strcpy( opczMsg, "PIN格式错误" );
+            return _PIN_ERROR_FORMAT;
+        }
+    }
+	strcpy(epczPlainPin, aczPin);
+    return 0;
+}
+
+
+int GetMitenoTermInfo( const char *epczTermId,  const char *epczMerchantId,  T_SVC_Miteno_Terminal  *ostTerm, char *opczMsg )
+{
+   EXEC SQL BEGIN DECLARE SECTION;
+   char   aczTermId[10];
+   char   aczMerchantId[20];
+   T_SVC_Miteno_Terminal    stTerm;
+   T_SVC_Miteno_TerminalInd    stTermInd;
+   EXEC SQL END DECLARE SECTION;
+
+   memset( &stTerm, 0, sizeof(T_SVC_Miteno_Terminal) );
+
+   memset( aczTermId, 0, sizeof(aczTermId) );
+   memset( aczMerchantId, 0, sizeof(aczMerchantId) );
+   strcpy( aczMerchantId, epczMerchantId );
+   strcpy( aczTermId, epczTermId );
+
+   EXEC SQL SELECT * INTO :stTerm :stTermInd FROM Svc_Miteno_Terminal 
+            WHERE code=:aczTermId and merchant_code=:aczMerchantId;
+   if ( SQLCODE )
+   {
+       if( SQLCODE == SQLNOTFOUND )
+       {
+           strcpy( opczMsg, "无效的商户号或终端号" );
+       }
+       else
+       {
+           strcpy( opczMsg, "取该终端信息失败" );
+       }
+       LOG4C(( LOG_FATAL, "错误SQLCODE[%d][%s][%s]", SQLCODE, aczTermId, aczMerchantId ));
+       return -1;
+   }
+
+   LOG4C(( LOG_DEBUG, "m_sMainKey[%s]", stTerm.m_sMainKey));
+
+   memcpy( ostTerm, &stTerm, sizeof( T_SVC_Miteno_Terminal ) );
+   return 0;
+}
+
+
+/*插入梅泰诺终端信息*/
+int UpdateAndInsertMitenoTerm(ST_TERM_LOGIN_REQ *pstReq, ST_TERM_LOGIN_RSP *pstRsp, T_SVC_Miteno_Terminal  *ostTerm, char *opczMsg )
+{
+	int nRet=0;
+	EXEC SQL BEGIN DECLARE SECTION;
+	T_SVC_Miteno_Terminal	  stTerm;
+    char    O_RetMsg[64+1];                     /* 响应信息 */
+	EXEC SQL END DECLARE SECTION;
+	int nIsNewTerm=0;	/*是否是新终端*/
+	char	 aczMk[17];
+
+	memset((char *)&stTerm, 0, sizeof(stTerm));
+	nIsNewTerm = 0;
+	/*先判断终端是否存在*/
+	nRet = GetMitenoTermInfo( pstReq->szTermID, pstReq->szMerchantID, &stTerm, O_RetMsg );
+	
+	if( nRet != 0 )	/*不存在终端*/
+	{
+		strcpy(stTerm.m_sTermId, pstReq->szTermID);
+		strcpy(stTerm.m_sMerchantId, pstReq->szMerchantID);
+		strcpy(stTerm.m_sName, "梅泰诺商户");
+		strcpy(stTerm.m_sShortName, "梅泰诺商户");
+		strcpy(stTerm.m_sTermId, pstReq->szTermID);
+		strcpy(stTerm.m_sTermId, pstReq->szTermID);
+		memcpy( stTerm.m_sMainKey, "C6E9F31E0F891CE7520CD8F28BF0028B", 32 );
+		sprintf( stTerm.m_sLoginTime, "%8.8s%6.6s", pstReq->szDate, pstReq->szTime);
+		sprintf( stTerm.m_sUpdateTime, "%8.8s%6.6s", pstReq->szDate, pstReq->szTime);
+		strcpy(stTerm.m_sBatchNo,"000001");
+		strcpy(stTerm.m_sPosTrace, pstReq->szTrace);
+		stTerm.m_sStatus[0]='0';
+		nIsNewTerm  = 1;
+	}
+	/*执行签到*/
+	strcpy(pstReq->szBatchNo, stTerm.m_sBatchNo);
+	nRet=doTermLogin(pstReq, pstRsp);	
+    LOG4C(( LOG_DEBUG, "doTermLogin[%d][%s]", pstRsp->nResp,pstRsp->szRespInfo));
+	if(nRet != 0)
+	{
+	  	strcpy(opczMsg, pstRsp->szRespInfo);
+		return -1;
+	}
+
+	/*判断返回是否成功*/
+	if(pstRsp->nResp == 0)
+	{
+		strncpy(stTerm.m_sName, pstRsp->szShopName,sizeof(stTerm.m_sName)-1);
+		strncpy(stTerm.m_sShortName, pstRsp->szShopName, sizeof(stTerm.m_sShortName)-1);
+		
+		if(nIsNewTerm == 1)
+		{			
+			EXEC SQL INSERT INTO Svc_Miteno_Terminal VALUES( :stTerm );
+			if( SQLCODE )
+			{
+				strcpy( O_RetMsg, "写入终端信息失败" );
+				LOG4C(( LOG_FATAL, "SQLCODE[%d]", SQLCODE ));
+				EXEC SQL ROLLBACK WORK;
+				return -1;
+			}
+			EXEC SQL COMMIT WORK;
+		}
+	}
+	memcpy((char *)ostTerm, (char *)&stTerm, sizeof(stTerm));
+	return 0;
+}
+
+
+
+
