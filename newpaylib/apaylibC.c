@@ -4,8 +4,6 @@
    This part of the software is released under one of the following licenses:
    GPL, the gSOAP public license, or Genivia's license for commercial use.
 */
-
-
 #include "apaylibH.h"
 #ifdef __cplusplus
 extern "C" {
